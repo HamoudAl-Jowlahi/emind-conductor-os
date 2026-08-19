@@ -1,3 +1,4 @@
+import { OPERATOR, operatorHandle } from '@/lib/operator';
 import { afterEach, describe, expect, test } from 'vitest';
 import { openDb, type FounderDb } from '@/lib/db';
 import { seedDatabase } from '@/lib/seed';
@@ -25,7 +26,7 @@ describe('social schemas', () => {
       SocialAccountSchema.parse({ platform: 'myspace', handle: '@x', url: null, order: 1 }),
     ).toThrow();
     expect(() =>
-      SocialAccountSchema.parse({ platform: 'instagram', handle: '@founderos.ai', url: null, order: 1 }),
+      SocialAccountSchema.parse({ platform: 'instagram', handle: operatorHandle(), url: null, order: 1 }),
     ).not.toThrow();
   });
 
@@ -38,8 +39,8 @@ describe('social schemas', () => {
 describe('social repo', () => {
   test('round-trips accounts ordered by their order column', () => {
     db = openDb(':memory:');
-    db.social.upsertAccount({ platform: 'tiktok', handle: '@founderos.ai', url: null, order: 2 });
-    db.social.upsertAccount({ platform: 'instagram', handle: '@founderos.ai', url: null, order: 1 });
+    db.social.upsertAccount({ platform: 'tiktok', handle: operatorHandle(), url: null, order: 2 });
+    db.social.upsertAccount({ platform: 'instagram', handle: operatorHandle(), url: null, order: 1 });
     expect(db.social.accounts().map((a) => a.platform)).toEqual(['instagram', 'tiktok']);
   });
 
@@ -123,10 +124,10 @@ describe('syncSocialSnapshots', () => {
     const recorded = syncSocialSnapshots(
       db,
       {
-        instagram: { handle: '@founderos.ai', followers: 42000 },
-        tiktok: { handle: '@founderos.ai', followers: 12000 },
-        facebook: { handle: 'Alex Rivera', followers: 100 }, // untracked platform
-        linkedin: { handle: 'Alex Rivera' }, // no follower count yet
+        instagram: { handle: operatorHandle(), followers: 42000 },
+        tiktok: { handle: operatorHandle(), followers: 12000 },
+        facebook: { handle: OPERATOR.fullName, followers: 100 }, // untracked platform
+        linkedin: { handle: OPERATOR.fullName }, // no follower count yet
       },
       '2026-06-13',
     );
@@ -190,7 +191,7 @@ describe('platformDetail', () => {
     db = openDb(':memory:');
     seedDatabase(db);
     const detail = platformDetail(db, 'instagram');
-    expect(detail?.account.handle).toBe('@founderos.ai');
+    expect(detail?.account.handle).toBe(operatorHandle());
     expect(detail?.snapshots.length).toBeGreaterThanOrEqual(1);
     expect(detail?.growth).toHaveProperty('d7');
     expect(detail?.growth).toHaveProperty('d30');
@@ -209,9 +210,9 @@ describe('seeded social data', () => {
     db = openDb(':memory:');
     seedDatabase(db);
     const byPlatform = new Map(db.social.accounts().map((a) => [a.platform, a]));
-    expect(byPlatform.get('instagram')?.handle).toBe('@founderos.ai');
+    expect(byPlatform.get('instagram')?.handle).toBe(operatorHandle());
     expect(byPlatform.get('twitter')?.handle).toBe('@Founderosai');
-    expect(byPlatform.get('linkedin')?.handle).toBe('Alex Rivera');
+    expect(byPlatform.get('linkedin')?.handle).toBe(OPERATOR.fullName);
   });
 
   test('seeds multi-month history ending at the seeded current value', () => {

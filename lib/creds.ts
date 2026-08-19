@@ -40,11 +40,17 @@ export function extractMcpEnvKey(claudeJson: unknown, server: string, key: strin
 
 const HOME = os.homedir();
 
+/**
+ * Optional fallback credential files. These were the previous owner's machine
+ * layout; every one is now overridable by env so a fresh install never depends
+ * on someone else's directory tree. Missing files are not an error — the
+ * resolver simply moves on, and `.env.local` remains the primary source.
+ */
 export const CRED_FILES = {
-  socialMedia: path.join(HOME, '.config/social', '.env'),
-  agentsEnv: path.join(HOME, 'knowledge', '.env.agents'),
-  arcads: path.join(HOME, 'Projects', 'arcads-agent-skills', '.env'),
-  claudeJson: path.join(HOME, '.config/mcp.json'),
+  socialMedia: process.env.CRED_FILE_SOCIAL ?? path.join(HOME, '.config/social', '.env'),
+  agentsEnv: process.env.CRED_FILE_AGENTS ?? path.join(HOME, 'knowledge', '.env.agents'),
+  arcads: process.env.CRED_FILE_ARCADS ?? path.join(HOME, 'Projects', 'arcads-agent-skills', '.env'),
+  claudeJson: process.env.CRED_FILE_MCP ?? path.join(HOME, '.config/mcp.json'),
 };
 
 function readEnvFileSafe(filePath: string): Record<string, string> {

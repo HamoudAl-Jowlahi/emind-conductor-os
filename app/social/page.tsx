@@ -41,7 +41,7 @@ const RECENT_POSTS = [
   { tag: 'Instagram · Reel', ago: '2h', caption: '3 agents that run my business while I sleep', kind: 'views', views: 12400, likes: 1104 },
   { tag: 'TikTok · Video', ago: '6h', caption: 'POV: your operating system has a command palette', kind: 'views', views: 8100, likes: 640 },
   { tag: 'X · Thread', ago: '1d', caption: 'How I wired 7 real connectors into one OS', kind: 'impressions', views: 1200, likes: 74 },
-  { tag: 'YouTube · Long', ago: '2d', caption: 'Founder OS walkthrough — building in public #4', kind: 'views', views: 940, likes: 88 },
+  { tag: 'YouTube · Long', ago: '2d', caption: 'Conductor OS walkthrough — building in public #4', kind: 'views', views: 940, likes: 88 },
   { tag: 'Instagram · Carousel', ago: '3d', caption: 'The larp-first, real-ready architecture', kind: 'reach', views: 6700, likes: 717 },
 ];
 
@@ -179,7 +179,7 @@ export default async function SocialPage() {
           <div className="mt-3 font-mono text-[26px] font-semibold leading-none tracking-[-0.02em]">
             {formatFollowers(email.subscribers)}
           </div>
-          <div className="mt-1.5 truncate font-mono text-[9.5px] text-os-dim">Beehiiv · Alex&apos;s Newsletter</div>
+          <div className="mt-1.5 truncate font-mono text-[9.5px] text-os-dim">Beehiiv · Newsletter</div>
           <div className="mt-3 h-1 overflow-hidden rounded-sm-t bg-os-surface2">
             <div
               className="h-full bg-os-accent opacity-60"

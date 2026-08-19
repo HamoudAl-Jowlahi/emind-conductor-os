@@ -1,3 +1,4 @@
+import { OPERATOR } from '@/lib/operator';
 import Link from 'next/link';
 import { Users } from 'lucide-react';
 import { getDb } from '@/lib/data';
@@ -173,7 +174,7 @@ export default async function OrgChartPage({ searchParams }: { searchParams?: Pr
       {/* Operator */}
       <div className="flex flex-col items-center">
         <Users className="h-7 w-7 text-os-text" />
-        <div className="mt-1 text-base font-bold tracking-wide">Alex Rivera</div>
+        <div className="mt-1 text-base font-bold tracking-wide">{OPERATOR.fullName}</div>
         <div className="text-[10px] uppercase tracking-[0.3em] text-os-dim">Operator</div>
         <div className="mt-2 h-6 w-px bg-os-border-bright" />
         <div className="text-[10px] uppercase tracking-[0.2em] text-os-muted">Conductor (Super Agent)</div>

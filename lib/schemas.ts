@@ -410,7 +410,7 @@ export const WorkflowStepSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   ownerKind: WorkflowOwnerKindSchema,
-  owner: z.string().min(1), // "Alex · Founder" / "SDR Agent"
+  owner: z.string().min(1), // "Operator · Founder" / "SDR Agent"
   hoursPerWeek: z.number().nonnegative(),
   tools: z.array(z.string()), // tool slugs (same namespace as agents)
   edgeLabel: z.string().nullable(), // label on the edge INTO the next step

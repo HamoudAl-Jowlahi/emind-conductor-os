@@ -166,7 +166,7 @@ export const realAgents: RuntimeAgent[] = [
       };
     },
   },
-  { id: 'zernio-publisher', name: 'Zernio Publisher', description: 'Six platforms under @founderos.ai via Zernio.', departmentId: 'dept-marketing-growth', run: zernioRun },
+  { id: 'zernio-publisher', name: 'Zernio Publisher', description: 'Six platforms under the connected social account via Zernio.', departmentId: 'dept-marketing-growth', run: zernioRun },
   { id: 'arcads-creative', name: 'Arcads Creative', description: 'UGC ads for Vantage via the Arcads API.', departmentId: 'dept-marketing-growth', run: arcadsRun },
   {
     id: 'remotion-editor',

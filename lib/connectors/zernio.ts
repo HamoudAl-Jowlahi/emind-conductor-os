@@ -235,7 +235,7 @@ export async function zernioStatus(): Promise<ConnectorStatus> {
       name: 'Zernio (Social)',
       kind: 'social',
       state: 'connected',
-      detail: `${accounts.length} platforms (@founderos.ai) · ${followers.toLocaleString('en-US')} total followers`,
+      detail: `${accounts.length} platforms · ${followers.toLocaleString('en-US')} total followers`,
       meta: { platforms: accounts.length, followers },
     };
   } catch (err) {

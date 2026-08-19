@@ -7,6 +7,7 @@
  * This is the one place colors enter the otherwise black & white OS:
  * each life area owns a hue, and everything underneath inherits it.
  */
+import { OPERATOR } from '@/lib/operator';
 import type { LifeMap, LifeMapNode } from '@/lib/schemas';
 
 export type LifeModule = { id: string; label: string; detail: string };
@@ -177,7 +178,7 @@ export function buildLifeMap(): LifeMap {
     {
       id: 'center',
       type: 'center',
-      label: "Alex's Life",
+      label: `${OPERATOR.name}'s Life`,
       color: '#fafafa',
       parent: null,
       detail: 'The core. Everything orbits this.',

@@ -1,3 +1,4 @@
+import { OPERATOR, operatorHandle, operatorOwner } from '@/lib/operator';
 import type { FounderDb } from '@/lib/db';
 import { PERSONAS } from '@/lib/personas-seed';
 import type {
@@ -34,7 +35,7 @@ const GRAY = {
   dark: '#525252',
 };
 
-// Alex's five operating pillars (2026-06-12 directive).
+// The five operating pillars.
 const departments: Department[] = [
   { id: 'dept-sales', name: 'Sales', slug: 'sales', tagline: 'Pipeline and deals.', color: GRAY.white, order: 1 },
   { id: 'dept-marketing-growth', name: 'Marketing/Growth', slug: 'marketing-growth', tagline: 'Publishing, content, attention.', color: GRAY.light, order: 2 },
@@ -141,7 +142,7 @@ const agents: Agent[] = [
     role: 'Six-Platform Publishing',
     status: 'active',
     tier: 'worker',
-    description: 'Publishes and monitors six platforms under @founderos.ai via Zernio. Key already on this machine — works today.',
+    description: 'Publishes and monitors six platforms under the connected social account via Zernio. Key already on this machine — works today.',
     model: 'zernio api',
     tools: ['zernio'],
     parentId: 'social-agent',
@@ -453,7 +454,7 @@ const agents: Agent[] = [
 ];
 
 // ── Humans in the process ─────────────────────────────────────────────────────
-// Real heads (Marco, Nadia) plus larp-first seeds for the roles Alex will hire
+// Seeded heads plus larp-first placeholders for roles yet to be hired
 // into (rename when the real person lands). Tools use the agents' slug
 // namespace so the graph chain still ends in tools for humans too.
 const people: Person[] = [
@@ -565,7 +566,7 @@ const sopTasks: SopTask[] = [
       'Connect the four configured IMAP inboxes on the sync cadence',
       'Pull unread counts and every thread newer than the last sweep',
       'Classify each thread: urgent, reply-needed, waiting-on-us, FYI',
-      'Draft suggested replies for reply-needed threads in Alex voice',
+      `Draft suggested replies for reply-needed threads in ${OPERATOR.name} voice`,
       'Hand urgent threads to the escalation queue with a one-line summary',
       'Surface anything from a client domain to the Clients pillar too',
     ],
@@ -600,8 +601,8 @@ const sopTasks: SopTask[] = [
     summary: 'The human hands on the threads that need judgment.',
     steps: [
       'Review the escalation queue the workers built overnight',
-      'Draft replies in Alex’s voice for VIP threads',
-      'Send what is cleared, file the rest for Alex’s approval',
+      `Draft replies in ${OPERATOR.name}’s voice for VIP threads`,
+      `Send what is cleared, file the rest for ${OPERATOR.name}’s approval`,
       'Chase any thread waiting on us for more than 24 hours',
       'Close the loop in /comms so nothing dangles',
     ],
@@ -624,7 +625,7 @@ const sopTasks: SopTask[] = [
   {
     id: 'sop-zernio-publisher', departmentId: 'dept-marketing-growth', assigneeKind: 'agent', assigneeId: 'zernio-publisher',
     title: 'Publish to six platforms',
-    summary: 'One queue out to every @founderos.ai surface.',
+    summary: 'One queue out to every the connected social account surface.',
     steps: [
       'Take the next queued post from the pipeline',
       'Adapt the caption per platform (IG, TikTok, X, YouTube, LinkedIn, Facebook)',
@@ -851,7 +852,7 @@ const sopTasks: SopTask[] = [
       'Categorize transactions using the statement’s own categories',
       'Reconcile against the income the agents recorded and chase every gap',
       'Confirm refunds and disputes are reflected in the venture totals',
-      'Deliver the month-end P&L to Alex with three lines of commentary',
+      `Deliver the month-end P&L to ${OPERATOR.name} with three lines of commentary`,
     ],
   },
 
@@ -921,7 +922,7 @@ const tools: Tool[] = [
   { id: 'tool-obsidian', name: 'Notes Vault', category: 'Knowledge', status: 'connected', color: GRAY.light, description: 'Local notes vault. Direct filesystem access.' },
   { id: 'tool-notion', name: 'Notion', category: 'Knowledge', status: 'available', color: GRAY.dim, description: 'Client implemented. Set NOTION_API_KEY and share pages with the integration.' },
   // Social & growth
-  { id: 'tool-zernio', name: 'Zernio', category: 'Social', status: 'connected', color: GRAY.white, description: '6 platforms under @founderos.ai (IG, TikTok, X…). Key at ~/.config/social/.env — live.' },
+  { id: 'tool-zernio', name: 'Zernio', category: 'Social', status: 'connected', color: GRAY.white, description: '6 platforms under the connected social account (IG, TikTok, X…). Key at ~/.config/social/.env — live.' },
   { id: 'tool-manychat', name: 'ManyChat', category: 'Social', status: 'available', color: GRAY.dim, description: 'DM automation. Endpoint map fully documented in shared-config; needs MANYCHAT_API_KEY.' },
   { id: 'tool-skool', name: 'Skool (via Playwright)', category: 'Social', status: 'connected', color: GRAY.mid, description: 'launchpad-cohort community, driven by the documented Playwright workflow.' },
   // CRM & revenue
@@ -970,7 +971,7 @@ const roadmap: RoadmapItem[] = [
   { id: 'rm-scheduler', title: 'Agent scheduler (cron runs)', quarter: '2026-Q3', status: 'next', departmentId: 'dept-tech', description: 'Recurring agent runs with run history and failure alerts.' },
   { id: 'rm-llm', title: 'LLM summarization layer', quarter: '2026-Q3', status: 'next', departmentId: 'dept-tech', description: 'Claude API digests over inbox/Slack/payments data.' },
   { id: 'rm-host', title: 'Migrate to a dedicated host', quarter: '2026-Q3', status: 'next', departmentId: 'dept-tech', description: 'Host app + gbrain + agents on the host; Supabase stays managed.' },
-  { id: 'rm-ui', title: 'UI design pass', quarter: '2026-Q4', status: 'later', departmentId: 'dept-tech', description: 'Alex-led redesign once all integrations are live.' },
+  { id: 'rm-ui', title: 'UI design pass', quarter: '2026-Q4', status: 'later', departmentId: 'dept-tech', description: `Operator-led redesign once all integrations are live.` },
   { id: 'rm-auth', title: 'Auth + remote access', quarter: '2026-Q4', status: 'later', departmentId: 'dept-tech', description: 'Reach FOUNDER OS on the host from anywhere, safely.' },
 ];
 
@@ -1000,13 +1001,13 @@ const phases: Phase[] = [
   { id: 'phase-4', number: 4, title: 'Dedicated Host', items: ['Migrate compute', 'Remote access + auth', '24/7 uptime'] },
 ];
 
-// The @founderos.ai footprint, handles straight from the Zernio config.
+// The the connected social account footprint, handles straight from the Zernio config.
 const socialAccounts: SocialAccount[] = [
-  { platform: 'instagram', handle: '@founderos.ai', url: 'https://instagram.com/founderos.ai', order: 1 },
-  { platform: 'tiktok', handle: '@founderos.ai', url: 'https://tiktok.com/@founderos.ai', order: 2 },
+  { platform: 'instagram', handle: operatorHandle(), url: `https://instagram.com/${OPERATOR.handle}`, order: 1 },
+  { platform: 'tiktok', handle: operatorHandle(), url: `https://tiktok.com/@${OPERATOR.handle}`, order: 2 },
   { platform: 'twitter', handle: '@Founderosai', url: 'https://x.com/Founderosai', order: 3 },
-  { platform: 'youtube', handle: '@founderosai', url: 'https://youtube.com/@founderosai', order: 4 },
-  { platform: 'linkedin', handle: 'Alex Rivera', url: null, order: 5 },
+  { platform: 'youtube', handle: operatorHandle(), url: `https://youtube.com/@${OPERATOR.handle}`, order: 4 },
+  { platform: 'linkedin', handle: OPERATOR.fullName, url: null, order: 5 },
 ];
 
 // Demo follower counts. LinkedIn has no baseline in this demo, so it gets
@@ -1101,13 +1102,13 @@ const socialDms: SocialDm[] = DM_TARGETS.map((t) => ({
 // (source 'seed-dummy'; real messages arrive as source 'manychat'). Four
 // threads, inbound + outbound, believable Vantage / FounderOS lead-gen tone.
 const socialDmMessages: SocialDmMessage[] = [
-  // Alex — agency owner off a reel
-  ['ig-alex', 'Alex Rivera', 'alex.rivera', 'in', 'saw your reel on the 3-agent setup 🔥 do you actually work with agencies?', null, '2026-07-18T14:02:00.000Z'],
-  ['ig-alex', 'Alex Rivera', 'alex.rivera', 'out', 'appreciate it! yeah — agencies are exactly who Vantage is built for. what are you running right now?', null, '2026-07-18T14:09:00.000Z'],
-  ['ig-alex', 'Alex Rivera', 'alex.rivera', 'in', 'SMMA, ~12 clients, drowning in fulfillment tbh 😅', null, '2026-07-18T14:15:00.000Z'],
+  // Agency owner who came in off a reel
+  ['ig-lead-1', 'Riley Barnes', 'riley.barnes', 'in', 'saw your reel on the 3-agent setup 🔥 do you actually work with agencies?', null, '2026-07-18T14:02:00.000Z'],
+  ['ig-lead-1', 'Riley Barnes', 'riley.barnes', 'out', 'appreciate it! yeah — agencies are exactly who Vantage is built for. what are you running right now?', null, '2026-07-18T14:09:00.000Z'],
+  ['ig-lead-1', 'Riley Barnes', 'riley.barnes', 'in', 'SMMA, ~12 clients, drowning in fulfillment tbh 😅', null, '2026-07-18T14:15:00.000Z'],
   // Jordan — keyword flow "SCALE"
   ['ig-jordan', 'Jordan Blake', 'jordanbuilds', 'in', 'SCALE', 'SCALE', '2026-07-18T12:41:00.000Z'],
-  ['ig-jordan', 'Jordan Blake', 'jordanbuilds', 'out', 'boom 💥 here’s the free breakdown → founderos.ai/scale. want me to show how it maps to your funnel?', 'SCALE', '2026-07-18T12:41:20.000Z'],
+  ['ig-jordan', 'Jordan Blake', 'jordanbuilds', 'out', 'boom 💥 here’s the free breakdown → example.com/scale. want me to show how it maps to your funnel?', 'SCALE', '2026-07-18T12:41:20.000Z'],
   ['ig-jordan', 'Jordan Blake', 'jordanbuilds', 'in', 'yes pls', null, '2026-07-18T13:05:00.000Z'],
   // Priya — story reply
   ['ig-priya', 'Priya N', 'priya.builds', 'in', 'replied to your story — I want OUT of retainer hell 😩', null, '2026-07-17T21:12:00.000Z'],
@@ -1411,7 +1412,7 @@ const workflows: Workflow[] = [
         id: 'wf-mer-3',
         title: 'Book demos',
         ownerKind: 'human',
-        owner: 'Alex · Founder',
+        owner: operatorOwner(),
         hoursPerWeek: 4,
         tools: ['calendar', 'attio'],
         edgeLabel: 'demo',
@@ -1422,7 +1423,7 @@ const workflows: Workflow[] = [
         id: 'wf-mer-4',
         title: 'Sales call',
         ownerKind: 'human',
-        owner: 'Alex · Founder',
+        owner: operatorOwner(),
         hoursPerWeek: 10,
         tools: ['webinarjam', 'attio'],
         edgeLabel: 'proposal',
@@ -1433,7 +1434,7 @@ const workflows: Workflow[] = [
         id: 'wf-mer-5',
         title: 'Proposal & follow-up',
         ownerKind: 'human',
-        owner: 'Alex · Founder',
+        owner: operatorOwner(),
         hoursPerWeek: 5,
         tools: ['proposal-gen', 'gmail'],
         edgeLabel: 'won',
@@ -1486,7 +1487,7 @@ const workflows: Workflow[] = [
         id: 'wf-lc-3',
         title: 'Strategy call',
         ownerKind: 'human',
-        owner: 'Alex · Founder',
+        owner: operatorOwner(),
         hoursPerWeek: 8,
         tools: ['ghl', 'calendar'],
         edgeLabel: 'closed',

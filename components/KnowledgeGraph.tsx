@@ -1198,7 +1198,7 @@ export function KnowledgeGraph({
         ))}
         </g>
 
-        {/* the middle of the brain is Notes: all of Alex's markdown */}
+        {/* the middle of the brain is Notes: all of the operator's markdown */}
         <text
           y={R_CORE + 22}
           textAnchor="middle"
@@ -1224,7 +1224,7 @@ export function KnowledgeGraph({
       <>
         {/* (No edge vignette: on light themes its var(--bg) overlay painted a
             darker rectangular frame around a lighter center — the "faint box"
-            Alex flagged. The canvas now fills the frame cleanly.) */}
+            flagged in review. The canvas now fills the frame cleanly.) */}
         {/* ring guides ride the same wheel as the nodes: small sunburst at
             home, huge low-hub arcs in focus — cx/cy/r are CSS-transitionable,
             so the rails visibly morph into the apparatus instead of floating
@@ -1801,7 +1801,7 @@ export function KnowledgeGraph({
           </g>
         )}
 
-        {/* the flank departments ride the rim ALREADY EXPANDED (Alex): their
+        {/* the flank departments ride the rim ALREADY EXPANDED: their
             limbs draw faint from the live gliding nodes, so each tilted tree
             reads as a whole department mounted on the huge wheel */}
         {focusTree && flankTeams && (
@@ -1900,7 +1900,7 @@ export function KnowledgeGraph({
                   onNodeClick(n);
                 }}
               >
-                <title>Notes: all of Alex&apos;s markdown, click to open the graph</title>
+                <title>Notes: the whole markdown store, click to open the graph</title>
                 {memoryCoreInner}
                 {/* synapse sparks — positions written from the camera rAF */}
                 <g

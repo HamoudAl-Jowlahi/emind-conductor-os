@@ -1,3 +1,4 @@
+import { OPERATOR } from '@/lib/operator';
 import type { Agent, Department, Person, SopTask } from '@/lib/schemas';
 import { lifeAreaForDepartment } from '@/lib/life-map';
 
@@ -18,7 +19,7 @@ export type KGNode = {
   id: string;
   kind: KGNodeKind;
   label: string;
-  ring: number; // 0 = Alex core → 4 = outer (tools)
+  ring: number; // 0 = operator core → 4 = outer (tools)
   color?: string; // life-area tint (teams)
 };
 
@@ -149,7 +150,7 @@ export function buildKnowledgeGraph(
 
   // Alex at the core — every pillar hangs off him (the life-at-the-core idea
   // folded in from the old life map).
-  nodes.push({ id: SELF_ID, kind: 'self', label: 'Alex', ring: RING.self });
+  nodes.push({ id: SELF_ID, kind: 'self', label: OPERATOR.name, ring: RING.self });
 
   // Teams / life pillars (ring 1) — only departments that actually have workers,
   // tinted with their life-area color.

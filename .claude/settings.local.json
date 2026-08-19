@@ -54,7 +54,12 @@
       "Bash(sed -i 's/the router for Founder OS operator agents\\\\./the router for eMind Conductor OS operator agents./' lib/agents/conductor.ts)",
       "Bash(sed -i 's/FOUNDER OS greps the markdown/eMind Conductor OS greps the markdown/' app/brain/page.tsx)",
       "Bash(sed -i 's/Credentials managed outside Founder OS/Credentials managed outside eMind Conductor OS/' components/ConnectFlow.tsx)",
-      "Bash(grep -oE \"name: '[^']{3,30}'\" lib/seed.ts)"
+      "Bash(grep -oE \"name: '[^']{3,30}'\" lib/seed.ts)",
+      "Bash(grep -cE \"^\\\\S+:[0-9]+: *\\(\\\\*|//|/\\\\*\\)\")",
+      "Bash(grep -vE \"^\\\\S+:[0-9]+: *\\(\\\\*|//|/\\\\*\\)\")",
+      "Bash(python -)",
+      "Bash(sed -i \"0,/^import /s//import { OPERATOR, operatorHandle, operatorOwner } from '@\\\\/lib\\\\/operator';\\\\nimport /\" lib/seed.ts)",
+      "Bash(grep -vE \":[0-9]+: *\\(\\\\*|//|/\\\\*\\)\")"
     ]
   }
 }
