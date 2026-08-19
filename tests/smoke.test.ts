@@ -22,25 +22,25 @@ type PageEntry = {
 
 // Every app/**/page.tsx, with the props each needs to be invoked.
 const PAGES: PageEntry[] = [
-  { file: 'page.tsx', load: () => import('@/app/page') },
-  { file: 'comms/page.tsx', load: () => import('@/app/comms/page') },
-  { file: 'social/page.tsx', load: () => import('@/app/social/page') },
-  { file: 'social/[platform]/page.tsx', load: () => import('@/app/social/[platform]/page'), props: { params: Promise.resolve({ platform: 'instagram' }) } },
-  { file: 'social/beehiiv/page.tsx', load: () => import('@/app/social/beehiiv/page') },
-  { file: 'content/page.tsx', load: () => import('@/app/content/page') },
-  { file: 'agents/page.tsx', load: () => import('@/app/agents/page') },
-  { file: 'tasks/page.tsx', load: () => import('@/app/tasks/page') },
-  { file: 'skills/page.tsx', load: () => import('@/app/skills/page') },
-  { file: 'org/page.tsx', load: () => import('@/app/org/page'), props: { searchParams: Promise.resolve({}) } },
-  { file: 'brain/page.tsx', load: () => import('@/app/brain/page') },
-  { file: 'finances/page.tsx', load: () => import('@/app/finances/page') },
-  { file: 'funnel/page.tsx', load: () => import('@/app/funnel/page'), props: { searchParams: Promise.resolve({}) } },
-  { file: 'workflows/page.tsx', load: () => import('@/app/workflows/page') },
-  { file: 'integrations/page.tsx', load: () => import('@/app/integrations/page') },
-  { file: 'roadmap/page.tsx', load: () => import('@/app/roadmap/page') },
-  { file: 'analytics/page.tsx', load: () => import('@/app/analytics/page') },
-  { file: 'reference/page.tsx', load: () => import('@/app/reference/page') },
-  { file: 'personas/page.tsx', load: () => import('@/app/personas/page') },
+  { file: 'page.tsx', load: () => import('@/app/(app)/page') },
+  { file: 'comms/page.tsx', load: () => import('@/app/(app)/comms/page') },
+  { file: 'social/page.tsx', load: () => import('@/app/(app)/social/page') },
+  { file: 'social/[platform]/page.tsx', load: () => import('@/app/(app)/social/[platform]/page'), props: { params: Promise.resolve({ platform: 'instagram' }) } },
+  { file: 'social/beehiiv/page.tsx', load: () => import('@/app/(app)/social/beehiiv/page') },
+  { file: 'content/page.tsx', load: () => import('@/app/(app)/content/page') },
+  { file: 'agents/page.tsx', load: () => import('@/app/(app)/agents/page') },
+  { file: 'tasks/page.tsx', load: () => import('@/app/(app)/tasks/page') },
+  { file: 'skills/page.tsx', load: () => import('@/app/(app)/skills/page') },
+  { file: 'org/page.tsx', load: () => import('@/app/(app)/org/page'), props: { searchParams: Promise.resolve({}) } },
+  { file: 'brain/page.tsx', load: () => import('@/app/(app)/brain/page') },
+  { file: 'finances/page.tsx', load: () => import('@/app/(app)/finances/page') },
+  { file: 'funnel/page.tsx', load: () => import('@/app/(app)/funnel/page'), props: { searchParams: Promise.resolve({}) } },
+  { file: 'workflows/page.tsx', load: () => import('@/app/(app)/workflows/page') },
+  { file: 'integrations/page.tsx', load: () => import('@/app/(app)/integrations/page') },
+  { file: 'roadmap/page.tsx', load: () => import('@/app/(app)/roadmap/page') },
+  { file: 'analytics/page.tsx', load: () => import('@/app/(app)/analytics/page') },
+  { file: 'reference/page.tsx', load: () => import('@/app/(app)/reference/page') },
+  { file: 'personas/page.tsx', load: () => import('@/app/(app)/personas/page') },
 ];
 
 function discoverPages(dir: string, base = ''): string[] {
@@ -66,7 +66,7 @@ describe('platform smoke — every page renders without throwing', () => {
   }, 20_000);
 
   test('the smoke net covers every app/**/page.tsx (no page escapes)', () => {
-    const discovered = discoverPages(path.join(process.cwd(), 'app')).sort();
+    const discovered = discoverPages(path.join(process.cwd(), 'app', '(app)')).sort();
     const covered = PAGES.map((p) => p.file).sort();
     expect(covered).toEqual(discovered);
   });

@@ -592,3 +592,22 @@ export type WorkflowStep = z.infer<typeof WorkflowStepSchema>;
 export type Workflow = z.infer<typeof WorkflowSchema>;
 export type SkillStatus = z.infer<typeof SkillStatusSchema>;
 export type Skill = z.infer<typeof SkillSchema>;
+
+/** A human who can sign in. The password hash never rides on this object. */
+export const UserSchema = z.object({
+  id: z.string().min(1),
+  email: z.string().email(),
+  name: z.string().min(1),
+  role: z.string().min(1),
+  createdAt: z.string().min(1),
+});
+export type User = z.infer<typeof UserSchema>;
+
+/** An opaque server-side session. The id IS the cookie value. */
+export const SessionSchema = z.object({
+  id: z.string().min(1),
+  userId: z.string().min(1),
+  createdAt: z.string().min(1),
+  expiresAt: z.string().min(1),
+});
+export type Session = z.infer<typeof SessionSchema>;

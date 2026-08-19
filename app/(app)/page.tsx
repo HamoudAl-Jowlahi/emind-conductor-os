@@ -1,4 +1,4 @@
-import { OPERATOR } from '@/lib/operator';
+import { currentOperator } from '@/lib/session';
 import Link from 'next/link';
 import { ArrowUpRight, Zap } from 'lucide-react';
 import { getDb } from '@/lib/data';
@@ -120,6 +120,7 @@ function StatTile({
 }
 
 export default async function HomePage() {
+  const operator = await currentOperator();
   const db = getDb();
   // Live follower sync from Zernio/Late (falls back to static config on API
   // failure) — parity with /social so the home figures are real-time too.
@@ -193,7 +194,7 @@ export default async function HomePage() {
 
       <PageHeader
         eyebrow="operator console"
-        title={`${greeting()}, ${OPERATOR.name}`}
+        title={`${greeting()}, ${operator.name}`}
         caret
         right={<Kbd>⌘K</Kbd>}
       />

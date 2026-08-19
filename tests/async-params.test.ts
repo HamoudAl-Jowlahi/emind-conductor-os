@@ -88,12 +88,12 @@ describe('Next 16 async params — API route handlers', () => {
 
 describe('Next 16 async params — pages', () => {
   test('social/[platform] page renders from a promise', async () => {
-    const mod = await import('@/app/social/[platform]/page');
+    const mod = await import('@/app/(app)/social/[platform]/page');
     await expect(mod.default({ params: Promise.resolve({ platform: 'instagram' }) })).resolves.toBeTruthy();
   });
 
   test('funnel page reads searchParams from a promise', async () => {
-    const mod = await import('@/app/funnel/page');
+    const mod = await import('@/app/(app)/funnel/page');
     await expect(
       mod.default({ searchParams: Promise.resolve({ venture: 'vantage', layout: 'radial' }) }),
     ).resolves.toBeTruthy();

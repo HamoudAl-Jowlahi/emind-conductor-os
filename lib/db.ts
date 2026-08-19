@@ -30,6 +30,8 @@ import {
   WorkflowSchema,
   SkillSchema,
   ToolSchema,
+  UserSchema,
+  SessionSchema,
   type Agent,
   type AgentCron,
   type AgentMessage,
@@ -61,6 +63,8 @@ import {
   type Workflow,
   type Skill,
   type Tool,
+  type User,
+  type Session,
 } from '@/lib/schemas';
 
 const DDL = `
@@ -290,6 +294,20 @@ CREATE TABLE IF NOT EXISTS workflows (
   revenue_usd INTEGER NOT NULL DEFAULT 0,
   ord INTEGER NOT NULL DEFAULT 0,
   steps TEXT NOT NULL DEFAULT '[]'
+);
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'Founder',
+  password_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sessions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS skills (
   id TEXT PRIMARY KEY,
@@ -551,6 +569,15 @@ export function openDb(path: string) {
       );
     },
   };
+
+  const rowToUser = (r: any): User =>
+    UserSchema.parse({
+      id: r.id,
+      email: r.email,
+      name: r.name,
+      role: r.role,
+      createdAt: r.created_at,
+    });
 
   const rowToRun = (r: any): AgentRun =>
     AgentRunSchema.parse({
@@ -1069,7 +1096,77 @@ export function openDb(path: string) {
     },
   };
 
+  /**
+   * Users and sessions. The password hash is kept OUT of the User object so it
+   * can never ride along into a page, an API response, or a log line — only
+   * `byEmail` hands it back, and only to the login path that must compare it.
+   */
+  const users = {
+    count(): number {
+      return (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;
+    },
+    insert(u: User, passwordHash: string): void {
+      db.prepare(
+        'INSERT OR REPLACE INTO users (id, email, name, role, password_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+      ).run(u.id, u.email, u.name, u.role, passwordHash, u.createdAt);
+    },
+    byEmail(email: string): { user: User; passwordHash: string } | null {
+      const r: any = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+      if (!r) return null;
+      return { user: rowToUser(r), passwordHash: r.password_hash };
+    },
+    byId(id: string): User | null {
+      const r: any = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+      return r ? rowToUser(r) : null;
+    },
+  };
+
+  const sessions = {
+    insert(s: Session): void {
+      db.prepare(
+        'INSERT OR REPLACE INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)',
+      ).run(s.id, s.userId, s.createdAt, s.expiresAt);
+    },
+    /** The session joined to its user — one query, since callers always need both. */
+    byId(id: string): { session: Session; user: User } | null {
+      const r: any = db
+        .prepare(
+          `SELECT s.id AS s_id, s.user_id, s.created_at AS s_created, s.expires_at,
+                  u.id AS u_id, u.email, u.name, u.role, u.created_at AS u_created
+             FROM sessions s JOIN users u ON u.id = s.user_id
+            WHERE s.id = ?`,
+        )
+        .get(id);
+      if (!r) return null;
+      return {
+        session: SessionSchema.parse({
+          id: r.s_id,
+          userId: r.user_id,
+          createdAt: r.s_created,
+          expiresAt: r.expires_at,
+        }),
+        user: UserSchema.parse({
+          id: r.u_id,
+          email: r.email,
+          name: r.name,
+          role: r.role,
+          createdAt: r.u_created,
+        }),
+      };
+    },
+    remove(id: string): void {
+      db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
+    },
+    /** Housekeeping: drop everything already past its expiry. */
+    purgeExpired(): number {
+      return db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(new Date().toISOString())
+        .changes;
+    },
+  };
+
   return {
+    users,
+    sessions,
     departments,
     agents,
     tools,

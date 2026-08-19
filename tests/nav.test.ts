@@ -33,7 +33,9 @@ describe('shared nav config', () => {
 
   test('every digit target is a real page route', () => {
     for (const href of DIGIT_VIEWS) {
-      const rel = href === '/' ? 'app/page.tsx' : `app/${href.replace(/^\//, '')}/page.tsx`;
+      // Pages live under the (app) route group — a group folder is invisible
+      // in the URL, so the href maps to app/(app)/<href>/page.tsx on disk.
+      const rel = href === '/' ? 'app/(app)/page.tsx' : `app/(app)/${href.replace(/^\//, '')}/page.tsx`;
       expect(existsSync(path.join(process.cwd(), rel)), `${href} should have a page.tsx`).toBe(true);
     }
   });

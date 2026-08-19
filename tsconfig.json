@@ -44,7 +44,9 @@
     ".next-daylight/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     ".next-prodtest/types/**/*.ts",
-    ".next-prodtest/dev/types/**/*.ts"
+    ".next-prodtest/dev/types/**/*.ts",
+    ".next-auth/types/**/*.ts",
+    ".next-auth/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

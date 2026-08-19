@@ -11,13 +11,13 @@ const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8');
  */
 describe('/brain header capture + graph placement', () => {
   test('the compact dump rides the header right slot; no standalone dump section', () => {
-    const page = read('app/brain/page.tsx');
+    const page = read('app/(app)/brain/page.tsx');
     expect(page).toMatch(/right=\{<BrainDump compact \/>\}/);
     expect(page).not.toMatch(/<section[^>]*>\s*<BrainDump \/>/);
   });
 
   test('the knowledge graph is the first section after the header', () => {
-    const page = read('app/brain/page.tsx');
+    const page = read('app/(app)/brain/page.tsx');
     const header = page.indexOf('<PageHeader');
     const graph = page.indexOf('Knowledge graph');
     const firstSection = page.indexOf('<section', header);
