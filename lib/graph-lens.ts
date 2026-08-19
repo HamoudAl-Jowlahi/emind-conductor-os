@@ -33,8 +33,6 @@ export const ENTITY_LENSES: Lens[] = [
 export const FUNCTION_LENSES: Lens[] = [
   { id: 'fn-core', group: 'function', label: 'Core' },
   { id: 'fn-enabling', group: 'function', label: 'Enabling' },
-  { id: 'fn-vantage', group: 'function', label: 'Vantage team' },
-  { id: 'fn-launchpad-cohort', group: 'function', label: 'Launchpad Cohort team' },
 ];
 
 export const ACTION_LENSES: Lens[] = [
@@ -57,24 +55,18 @@ export const ALL_LENSES: Lens[] = [...ENTITY_LENSES, ...FUNCTION_LENSES, ...ACTI
 const CORE_DEPTS = new Set(['team:dept-sales', 'team:dept-marketing-growth', 'team:dept-clients']);
 const ENABLING_DEPTS = new Set(['team:dept-tech', 'team:dept-finance', 'team:dept-comms']);
 
-/** Venture team rosters — seeded agent ids (graph nodes are `emp:<id>`). */
-const VENTURE_TEAMS: Record<string, string[]> = {
-  'fn-vantage': ['vantage-sales', 'vantage-fanbasis', 'fanbasis-sales'],
-  'fn-launchpad-cohort': ['launchpad-cohort-sales'],
-};
-
 /** What each action actually runs on — seeded agent ids, honest best-fit. */
 const ACTION_AGENTS: Record<string, string[]> = {
-  'act-ad-creation': ['arcads-creative', 'higgsfield-creative', 'remotion-editor'],
-  'act-lead-generation': ['sales-agent', 'launchpad-cohort-sales', 'manychat-mcp', 'vantage-sales'],
-  'act-content-repurposing': ['remotion-editor', 'zernio-publisher'],
+  'act-ad-creation': ['arcads-creative', 'higgsfield-creative'],
+  'act-lead-generation': ['crm-pulse', 'comms-agent'],
+  'act-content-repurposing': ['zernio-publisher'],
   'act-content-ideation': ['social-agent', 'data-agent'],
   'act-content-scripts': ['social-agent', 'arcads-creative'],
   'act-social-sentiment': ['social-agent', 'data-agent'],
-  'act-social-scheduler': ['zernio-publisher', 'social-agent', 'manychat-mcp'],
+  'act-social-scheduler': ['zernio-publisher', 'social-agent'],
   'act-ai-visuals': ['higgsfield-creative', 'arcads-creative'],
   'act-competitor-intel': ['data-agent', 'arcads-creative'],
-  'act-icp-simulation': ['data-agent', 'sales-calls-data', 'crm-pulse'],
+  'act-icp-simulation': ['data-agent', 'crm-pulse'],
   'act-channel-budget': ['data-agent', 'payments-pulse'],
 };
 
@@ -107,8 +99,10 @@ export function lensNodeSet(lensId: string, ctx: LensContext): Set<string> {
       byKind('team');
       break;
     case 'ent-teams': {
-      const members = idSet([...VENTURE_TEAMS['fn-vantage'], ...VENTURE_TEAMS['fn-launchpad-cohort']]);
-      for (const n of ctx.nodes) if (members.has(n.id)) out.add(n.id);
+      // Every worker, whichever pillar it serves. The old build split these by
+      // the previous owner's two ventures; with those gone, "teams" is simply
+      // the whole workforce.
+      for (const n of ctx.nodes) if (n.kind === 'employee' || n.kind === 'person') out.add(n.id);
       break;
     }
     case 'ent-workflows':
@@ -121,12 +115,6 @@ export function lensNodeSet(lensId: string, ctx: LensContext): Set<string> {
         const team = n.kind === 'team' ? n.id : ctx.teamOf(n.id);
         if (team && depts.has(team)) out.add(n.id);
       }
-      break;
-    }
-    case 'fn-vantage':
-    case 'fn-launchpad-cohort': {
-      const members = idSet(VENTURE_TEAMS[lensId]);
-      for (const n of ctx.nodes) if (members.has(n.id)) out.add(n.id);
       break;
     }
     default: {

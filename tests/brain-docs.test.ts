@@ -74,7 +74,7 @@ describe('buildBrainDocs', () => {
   test('a tool doc lists who uses it, wikilinked', () => {
     const docs = docsFor(seeded());
     const attio = docs.find((x) => x.path === 'tools/attio.md')!.content;
-    expect(attio).toContain('[[sales-agent]]');
+    expect(attio).toContain('[[crm-pulse]]');
     expect(attio).toContain('[[person-marco]]');
   });
 

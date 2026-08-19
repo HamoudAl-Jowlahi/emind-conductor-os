@@ -169,20 +169,6 @@ export const realAgents: RuntimeAgent[] = [
   { id: 'zernio-publisher', name: 'Zernio Publisher', description: 'Six platforms under the connected social account via Zernio.', departmentId: 'dept-marketing-growth', run: zernioRun },
   { id: 'arcads-creative', name: 'Arcads Creative', description: 'UGC ads for Vantage via the Arcads API.', departmentId: 'dept-marketing-growth', run: arcadsRun },
   {
-    id: 'remotion-editor',
-    name: 'Remotion Editor',
-    description: 'Editing and rendering pipeline for social clips, captions, and promotional cuts.',
-    departmentId: 'dept-marketing-growth',
-    async run() {
-      const stack = await localStackStatus();
-      return {
-        ok: stack.state === 'connected',
-        summary: `Remotion/social editing lane mapped · local stack: ${stack.detail}`,
-        data: stack.meta,
-      };
-    },
-  },
-  {
     id: 'higgsfield-creative',
     name: 'Higgsfield Creative',
     description: 'Higgsfield creative generation for campaign visuals and product assets.',
@@ -196,110 +182,8 @@ export const realAgents: RuntimeAgent[] = [
       };
     },
   },
-  {
-    id: 'manychat-mcp',
-    name: 'ManyChat MCP',
-    description: 'ManyChat MCP/API lane for social DM automations and lead capture.',
-    departmentId: 'dept-marketing-growth',
-    run: envIntegrationRun('ManyChat', 'MANYCHAT_API_KEY', 'DM automation and lead capture'),
-  },
 
   // ── Sales instance + pipeline worker ─────────────────────────────────
-  {
-    id: 'sales-agent',
-    name: 'Sales Agent',
-    description: 'Aggregates the revenue pipeline workers for Sales.',
-    departmentId: 'dept-sales',
-    async run() {
-      const [crm, processors] = await Promise.all([attioStatus(), processorConfirmationRun()]);
-      return {
-        ok: crm.state === 'connected' || processors.ok,
-        summary: `Sales pipeline · Attio ${crm.state === 'connected' ? 'LIVE' : 'DOWN'} · processors ${label(processors)} · FanBasis/PAVA/calls lanes mapped`,
-        data: { crm, processors },
-      };
-    },
-  },
-  {
-    id: 'launchpad-cohort-sales',
-    name: 'Launchpad Cohort',
-    description:
-      'Launchpad Cohort sales lane: WebinarJam funnel (registrants/attendees → leads), Trakyo revenue attribution, plus offer/call/payment context.',
-    departmentId: 'dept-sales',
-    async run() {
-      const [webinar, trakyo] = await Promise.all([webinarjamStatus(), trakyoStatus()]);
-      const live = [webinar, trakyo].filter((s) => s.state === 'connected').length;
-      return {
-        ok: live > 0,
-        summary: `Launchpad Cohort · WebinarJam ${webinar.state} · Trakyo ${trakyo.state}${
-          live === 0 ? ' — set WEBINARJAM_API_KEY to pull webinar leads' : ''
-        }`,
-        data: { webinar, trakyo },
-      };
-    },
-    chatTools(): LlmToolSpec[] {
-      return [
-        {
-          name: 'searchWebinarRegistrants',
-          description:
-            "List registrants/attendees for an Launchpad Cohort WebinarJam session (these are leads). Read-only. Needs the webinar's id and schedule id.",
-          parameters: z.object({
-            webinarId: z.string().describe('WebinarJam webinar_id'),
-            scheduleId: z.string().describe('WebinarJam schedule_id for the session'),
-          }),
-          execute: async (args) => {
-            const webinarId = typeof args.webinarId === 'string' ? args.webinarId : '';
-            const scheduleId = typeof args.scheduleId === 'string' ? args.scheduleId : '';
-            if (!webinarId || !scheduleId) return { error: 'webinarId and scheduleId are required' };
-            const registrants = await listRegistrants(webinarId, scheduleId);
-            return { count: registrants.length, registrants: registrants.slice(0, 25) };
-          },
-        },
-      ];
-    },
-  },
-  {
-    id: 'vantage-sales',
-    name: 'Vantage',
-    description: 'Vantage sales lane: pipeline, FanBasis context, payments, and call data.',
-    departmentId: 'dept-sales',
-    run: plannedLaneRun('Vantage sales', 'connect Vantage-specific CRM/payment/call sources'),
-  },
-  {
-    id: 'fanbasis-sales',
-    name: 'FanBasis',
-    description: 'FanBasis offer/payment/customer context for Sales.',
-    departmentId: 'dept-sales',
-    run: envIntegrationRun('FanBasis', 'FANBASIS_API_KEY', 'offers, customers, and payment context'),
-  },
-  {
-    id: 'vantage-fanbasis',
-    name: 'Vantage FanBasis',
-    description: 'FanBasis lane specifically under Vantage.',
-    departmentId: 'dept-sales',
-    run: envIntegrationRun('Vantage FanBasis', 'FANBASIS_API_KEY', 'Vantage offer/payment context'),
-  },
-  { id: 'stripe-sales', name: 'Stripe', description: 'Stripe payment confirmation for sales workflows.', departmentId: 'dept-sales', run: stripeSalesRun },
-  {
-    id: 'processor-confirmation',
-    name: 'Processor Confirm',
-    description: 'Confirms payment states across configured processor APIs.',
-    departmentId: 'dept-sales',
-    run: processorConfirmationRun,
-  },
-  {
-    id: 'pava-financing',
-    name: 'PAVA Financing',
-    description: 'PAVA financing options for offers and payment plans.',
-    departmentId: 'dept-sales',
-    run: envIntegrationRun('PAVA', 'PAVA_API_KEY', 'financing options for sales offers'),
-  },
-  {
-    id: 'sales-calls-data',
-    name: 'Sales Calls Data',
-    description: 'Sales call recordings, notes, outcomes, and follow-up context.',
-    departmentId: 'dept-sales',
-    run: envIntegrationRun('Sales calls data', 'FATHOM_API_KEY', 'call recordings, summaries, and follow-up context'),
-  },
 
   // ── Knowledge: the G-Brain analyst and its auditors ──────────────────
   {

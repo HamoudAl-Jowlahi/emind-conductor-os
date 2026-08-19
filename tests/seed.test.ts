@@ -63,34 +63,24 @@ describe('seedDatabase', () => {
     const byId = new Map(db.agents.all().map((a) => [a.id, a.departmentId]));
     // Sales: the deal / account / CRM lanes
     for (const id of [
-      'sales-agent',
       'crm-pulse',
-      'launchpad-cohort-sales',
-      'vantage-sales',
-      'vantage-fanbasis',
-      'sales-calls-data',
     ]) {
       expect(byId.get(id)).toBe('dept-sales');
     }
     // Finances: the payment processors moved off Sales
     for (const id of [
       'payments-pulse',
-      'stripe-sales',
-      'processor-confirmation',
-      'fanbasis-sales',
-      'pava-financing',
     ]) {
       expect(byId.get(id)).toBe('dept-finance');
     }
-    expect(db.agents.all().filter((a) => a.departmentId === 'dept-finance').length).toBeGreaterThanOrEqual(5);
+    // Finances is one agent now: the four processor lanes were the previous owner's.
+    expect(db.agents.all().filter((a) => a.departmentId === 'dept-finance').length).toBe(1);
     // Marketing/Growth: the social/content crew
     for (const id of [
       'social-agent',
       'zernio-publisher',
       'arcads-creative',
-      'remotion-editor',
       'higgsfield-creative',
-      'manychat-mcp',
     ]) {
       expect(byId.get(id)).toBe('dept-marketing-growth');
     }
@@ -122,26 +112,18 @@ describe('seedDatabase', () => {
       expect(byId.get(worker)?.tier).toBe('worker');
     }
     // Studio: social media + content creation
-    for (const worker of ['zernio-publisher', 'arcads-creative', 'remotion-editor', 'higgsfield-creative', 'manychat-mcp']) {
+    for (const worker of ['zernio-publisher', 'arcads-creative', 'higgsfield-creative']) {
       expect(byId.get(worker)?.parentId).toBe('social-agent');
     }
     // Sales: CRM / account lanes hang off the sales instance
     for (const worker of [
       'crm-pulse',
-      'launchpad-cohort-sales',
-      'vantage-sales',
-      'sales-calls-data',
     ]) {
-      expect(byId.get(worker)?.parentId).toBe('sales-agent');
       expect(byId.get(worker)?.tier).toBe('worker');
     }
-    expect(byId.get('vantage-fanbasis')?.parentId).toBe('vantage-sales');
-    expect(byId.get('vantage-fanbasis')?.tier).toBe('worker');
-    // Finances: the payment processors now report to Payments Pulse
-    for (const worker of ['stripe-sales', 'processor-confirmation', 'fanbasis-sales', 'pava-financing']) {
-      expect(byId.get(worker)?.parentId).toBe('payments-pulse');
-      expect(byId.get(worker)?.tier).toBe('worker');
-    }
+    // Finances: Payments Pulse now stands alone — its four worker lanes were
+    // scoped to the previous owner's processors and went with them.
+    expect(byId.get('payments-pulse')?.tier).toBe('lead');
     // Knowledge: the G-Brain analyst and its auditors
     for (const worker of ['markdown-auditor', 'vector-auditor']) {
       expect(byId.get(worker)?.parentId).toBe('data-agent');

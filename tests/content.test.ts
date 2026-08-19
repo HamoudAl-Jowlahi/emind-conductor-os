@@ -13,7 +13,7 @@ describe('contentAgents', () => {
     const crew = contentAgents(db.agents.all());
     expect(crew[0].id).toBe('social-agent');
     const ids = crew.map((a) => a.id);
-    for (const id of ['social-agent', 'zernio-publisher', 'arcads-creative', 'remotion-editor', 'higgsfield-creative', 'manychat-mcp']) {
+    for (const id of ['social-agent', 'zernio-publisher', 'arcads-creative', 'higgsfield-creative']) {
       expect(ids).toContain(id);
     }
   });
@@ -23,7 +23,6 @@ describe('contentAgents', () => {
     seedDatabase(db);
     const crew = contentAgents(db.agents.all());
     expect(crew.every((a) => a.departmentId === 'dept-marketing-growth')).toBe(true);
-    expect(crew.map((a) => a.id)).not.toContain('sales-agent');
     expect(crew.map((a) => a.id)).not.toContain('data-agent');
   });
 
@@ -33,6 +32,6 @@ describe('contentAgents', () => {
     const a = contentAgents(db.agents.all()).map((x) => x.id);
     const b = contentAgents(db.agents.all()).map((x) => x.id);
     expect(a).toEqual(b);
-    expect(a.length).toBeGreaterThanOrEqual(5);
+    expect(a.length).toBeGreaterThanOrEqual(3);
   });
 });

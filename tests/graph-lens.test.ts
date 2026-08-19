@@ -24,15 +24,15 @@ describe('graph lenses — Alex taxonomy (2026-07-12)', () => {
     ]);
     expect(FUNCTION_LENSES.map((l) => l.label)).toContain('Core');
     expect(FUNCTION_LENSES.map((l) => l.label)).toContain('Enabling');
-    expect(FUNCTION_LENSES.map((l) => l.label)).toContain('Vantage team');
-    expect(FUNCTION_LENSES.map((l) => l.label)).toContain('Launchpad Cohort team');
+    // The two venture lenses went with the previous owner's business.
+    expect(FUNCTION_LENSES).toHaveLength(2);
     expect(ACTION_LENSES).toHaveLength(11);
     expect(new Set(ALL_LENSES.map((l) => l.id)).size).toBe(ALL_LENSES.length);
   });
 
   test('entity lenses match by node kind against the real seeded graph', () => {
     expect(lensNodeSet('ent-people', ctx).size).toBe(5);
-    expect(lensNodeSet('ent-subagents', ctx).size).toBe(30);
+    expect(lensNodeSet('ent-subagents', ctx).size).toBe(19); // 30 minus the 11 cut
     expect(lensNodeSet('ent-departments', ctx).size).toBe(6);
     expect(lensNodeSet('ent-sops', ctx).size).toBeGreaterThan(20);
     expect(lensNodeSet('ent-tools', ctx).size).toBeGreaterThan(20);
@@ -51,15 +51,7 @@ describe('graph lenses — Alex taxonomy (2026-07-12)', () => {
     // a node is never both core and enabling
     for (const id of core) expect(enabling.has(id), id).toBe(false);
     // sectors include their workers, not just the gateways
-    expect(core.has('emp:sales-agent')).toBe(true);
-  });
-
-  test('venture team lenses light their rosters', () => {
-    const mer = lensNodeSet('fn-vantage', ctx);
-    expect(mer.has('emp:vantage-sales')).toBe(true);
-    expect(mer.has('emp:vantage-fanbasis')).toBe(true);
-    const aa = lensNodeSet('fn-launchpad-cohort', ctx);
-    expect(aa.has('emp:launchpad-cohort-sales')).toBe(true);
+    expect(core.has('emp:social-agent')).toBe(true);
   });
 
   test('every action lens resolves to real seeded agents', () => {
@@ -72,7 +64,7 @@ describe('graph lenses — Alex taxonomy (2026-07-12)', () => {
 
   test('specific action mappings hold', () => {
     expect(lensNodeSet('act-ad-creation', ctx).has('emp:arcads-creative')).toBe(true);
-    expect(lensNodeSet('act-lead-generation', ctx).has('emp:sales-agent')).toBe(true);
+    expect(lensNodeSet('act-lead-generation', ctx).has('emp:crm-pulse')).toBe(true);
     expect(lensNodeSet('act-social-scheduler', ctx).has('emp:zernio-publisher')).toBe(true);
     expect(lensNodeSet('act-ai-visuals', ctx).has('emp:higgsfield-creative')).toBe(true);
   });
