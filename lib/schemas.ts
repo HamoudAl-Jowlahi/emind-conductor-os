@@ -264,6 +264,8 @@ export const AgentCronSchema = z.object({
   description: z.string().min(1),
   enabled: z.boolean(),
   createdAt: z.string().min(1),
+  /** Minute-truncated ISO of the last firing; null until it has ever run. */
+  lastRunAt: z.string().nullable().default(null),
 });
 
 export const SocialPlatformSchema = z.enum(['instagram', 'tiktok', 'twitter', 'youtube', 'linkedin']);
@@ -570,6 +572,8 @@ export type SocialPostStatus = z.infer<typeof SocialPostStatusSchema>;
 export type SocialPost = z.infer<typeof SocialPostSchema>;
 export type AgentTask = z.infer<typeof AgentTaskSchema>;
 export type AgentCron = z.infer<typeof AgentCronSchema>;
+/** What a caller supplies: `lastRunAt` is filled in by the runner, not the author. */
+export type AgentCronInput = z.input<typeof AgentCronSchema>;
 export type PersonaPillar = z.infer<typeof PersonaPillarSchema>;
 export type Persona = z.infer<typeof PersonaSchema>;
 export type Person = z.infer<typeof PersonSchema>;

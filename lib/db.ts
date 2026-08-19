@@ -34,6 +34,7 @@ import {
   SessionSchema,
   type Agent,
   type AgentCron,
+  type AgentCronInput,
   type AgentMessage,
   type AgentRun,
   type AgentTask,
@@ -175,7 +176,8 @@ CREATE TABLE IF NOT EXISTS agent_crons (
   schedule TEXT NOT NULL,
   description TEXT NOT NULL,
   enabled INTEGER NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  last_run_at TEXT
 );
 CREATE TABLE IF NOT EXISTS contact_tags (
   person TEXT NOT NULL,
@@ -331,6 +333,14 @@ function migrateAgentsTable(db: InstanceType<typeof Database>): void {
   if (!columns.has('instance')) db.exec("ALTER TABLE agents ADD COLUMN instance TEXT NOT NULL DEFAULT 'builtin'");
 }
 
+/** Databases created before the scheduler landed have no last-fired column. */
+function migrateAgentCronsTable(db: InstanceType<typeof Database>): void {
+  const columns = new Set(
+    (db.pragma('table_info(agent_crons)') as { name: string }[]).map((c) => c.name),
+  );
+  if (!columns.has('last_run_at')) db.exec('ALTER TABLE agent_crons ADD COLUMN last_run_at TEXT');
+}
+
 /** Databases created before the funnel-space build lack these columns. */
 function migrateFunnelContactsTable(db: InstanceType<typeof Database>): void {
   const columns = new Set(
@@ -391,6 +401,7 @@ export function openDb(path: string) {
   db.pragma('journal_mode = WAL');
   db.exec(DDL);
   migrateAgentsTable(db);
+  migrateAgentCronsTable(db);
   migrateFunnelContactsTable(db);
   migrateSkillsTable(db);
 
@@ -712,11 +723,11 @@ export function openDb(path: string) {
   const rowToCron = (r: any): AgentCron =>
     AgentCronSchema.parse({
       id: r.id, agentId: r.agent_id, schedule: r.schedule, description: r.description,
-      enabled: Boolean(r.enabled), createdAt: r.created_at,
+      enabled: Boolean(r.enabled), createdAt: r.created_at, lastRunAt: r.last_run_at ?? null,
     });
 
   const agentCrons = {
-    insert(c: AgentCron): void {
+    insert(c: AgentCronInput): void {
       AgentCronSchema.parse(c);
       if (!isValidCron(c.schedule)) throw new Error(`invalid cron schedule: ${c.schedule}`);
       db.prepare(
@@ -734,6 +745,10 @@ export function openDb(path: string) {
     },
     setEnabled(id: string, enabled: boolean): void {
       db.prepare('UPDATE agent_crons SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
+    },
+    /** Stamp the minute this schedule last fired — the de-duplication key. */
+    markRan(id: string, minuteKey: string): void {
+      db.prepare('UPDATE agent_crons SET last_run_at = ? WHERE id = ?').run(minuteKey, id);
     },
     remove(id: string): void {
       db.prepare('DELETE FROM agent_crons WHERE id = ?').run(id);

@@ -3,8 +3,8 @@
 /**
  * Per-agent management drawer: skills, tasks, and cron jobs in one place.
  * Tasks and crons persist to SQLite via /api/agents/work. Cron definitions
- * are stored and scheduled-on-paper; the runner process lands with the
- * dedicated host deploy and the UI says so honestly.
+ * are live: the in-process scheduler fires them on the minute and each row
+ * shows when it last ran.
  */
 import { useState } from 'react';
 import { ChevronDown, ChevronUp, Plus, Trash2, Clock } from 'lucide-react';
@@ -188,6 +188,11 @@ export function AgentWorkPanel({
                   <span className="min-w-0 truncate text-os-muted" title={cron.description}>
                     {describeCron(cron.schedule) ?? ''} — {cron.description}
                   </span>
+                  <span className="shrink-0 font-mono text-[9px] text-os-dim">
+                    {cron.lastRunAt
+                      ? `ran ${new Date(cron.lastRunAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                      : 'never run'}
+                  </span>
                   <button onClick={() => removeCron(cron.id)} className="ml-auto shrink-0 text-os-dim hover:text-os-text">
                     <Trash2 className="h-3 w-3" />
                   </button>
@@ -196,7 +201,7 @@ export function AgentWorkPanel({
               {crons.length === 0 && <li className="text-[10px] text-os-dim">no cron jobs yet</li>}
             </ul>
             <p className="mt-1.5 text-[9px] leading-relaxed text-os-dim">
-              Schedules are stored and versioned here; the runner process ships with the dedicated host deploy.
+              Live — the scheduler fires these on the minute while the server is running.
             </p>
           </div>
         </div>
