@@ -23,11 +23,44 @@ describe('llmStatus — honest connector state', () => {
     expect(status.id).toBe('llm');
   });
 
-  test('connected when the gateway key is present', async () => {
+  test('connected when the key has usable credit', async () => {
     process.env[KEY] = 'test-gateway-key';
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ balance: '4.20', total_used: '0.80' }), { status: 200 }),
+    );
     const status = await llmStatus();
     expect(status.state).toBe('connected');
     expect(status.detail.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * A key alone proves nothing — Vercel refuses to serve requests until a card
+   * unlocks the free credits, and the balance reads "0" until then. Reporting
+   * `connected` there is exactly the fake green light this project forbids:
+   * the board would look healthy while every agent chat failed.
+   */
+  test('error, not connected, when the key is valid but the balance is zero', async () => {
+    process.env[KEY] = 'test-gateway-key';
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ balance: '0', total_used: '0' }), { status: 200 }),
+    );
+    const status = await llmStatus();
+    expect(status.state).toBe('error');
+    expect(status.detail).toMatch(/credit/i);
+  });
+
+  test('error when the gateway rejects the key', async () => {
+    process.env[KEY] = 'bad-key';
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('unauthorized', { status: 401 }));
+    const status = await llmStatus();
+    expect(status.state).toBe('error');
+  });
+
+  test('a network failure degrades to error, never to a fake connected', async () => {
+    process.env[KEY] = 'test-gateway-key';
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('ECONNREFUSED'));
+    const status = await llmStatus();
+    expect(status.state).toBe('error');
   });
 });
 

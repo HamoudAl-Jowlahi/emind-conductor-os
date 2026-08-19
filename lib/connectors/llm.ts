@@ -125,6 +125,17 @@ export function chat(req: LlmChatRequest): Promise<LlmChatResult> {
   return getLlmProvider().chat(req);
 }
 
+const CREDITS_URL = 'https://ai-gateway.vercel.sh/v1/credits';
+const CREDITS_TIMEOUT_MS = 4000;
+
+/**
+ * A key on disk proves nothing. The gateway refuses to serve requests until a
+ * card unlocks the free credits, and until then every model call fails while
+ * the balance reads "0" — so key-presence alone would light the board green
+ * while every agent chat died. This asks the gateway for the real balance and
+ * reports what it finds. Cheap (one small GET), bounded by a timeout, and
+ * degrades to `error` rather than to a comfortable lie.
+ */
 export async function llmStatus(): Promise<ConnectorStatus> {
   const base = { id: 'llm', name: 'LLM (Gateway)', kind: 'orchestration' } as const;
   if (process.env.LLM_PROVIDER === 'stub') {
@@ -138,5 +149,41 @@ export async function llmStatus(): Promise<ConnectorStatus> {
       detail: 'Set AI_GATEWAY_API_KEY in .env.local to enable agent chat via the Vercel AI Gateway.',
     };
   }
-  return { ...base, state: 'connected', detail: `Vercel AI Gateway · default model ${DEFAULT_MODEL}` };
+
+  try {
+    const res = await fetch(CREDITS_URL, {
+      headers: { Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(CREDITS_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      return {
+        ...base,
+        state: 'error',
+        detail: `Gateway rejected the key (HTTP ${res.status}) — check AI_GATEWAY_API_KEY.`,
+      };
+    }
+    const body = (await res.json()) as { balance?: string; total_used?: string };
+    const balance = Number(body.balance ?? '0');
+    if (!Number.isFinite(balance) || balance <= 0) {
+      return {
+        ...base,
+        state: 'error',
+        detail:
+          'Key valid but the credit balance is 0 — Vercel needs a card on file to unlock the free credits before it will serve any request.',
+        meta: { balance: body.balance ?? '0' },
+      };
+    }
+    return {
+      ...base,
+      state: 'connected',
+      detail: `Vercel AI Gateway · default model ${DEFAULT_MODEL} · balance ${body.balance}`,
+      meta: { balance: body.balance ?? '', used: body.total_used ?? '' },
+    };
+  } catch (err) {
+    return {
+      ...base,
+      state: 'error',
+      detail: `Gateway unreachable: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 }
