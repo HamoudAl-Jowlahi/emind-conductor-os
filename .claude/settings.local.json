@@ -59,7 +59,9 @@
       "Bash(grep -vE \"^\\\\S+:[0-9]+: *\\(\\\\*|//|/\\\\*\\)\")",
       "Bash(python -)",
       "Bash(sed -i \"0,/^import /s//import { OPERATOR, operatorHandle, operatorOwner } from '@\\\\/lib\\\\/operator';\\\\nimport /\" lib/seed.ts)",
-      "Bash(grep -vE \":[0-9]+: *\\(\\\\*|//|/\\\\*\\)\")"
+      "Bash(grep -vE \":[0-9]+: *\\(\\\\*|//|/\\\\*\\)\")",
+      "Bash(npm pkg *)",
+      "Bash(node -p \"const p=require\\('./package.json'\\); 'name: '+p.name+'\\\\nlicense: '+p.license+'\\\\nprivate: '+p.private\")"
     ]
   }
 }

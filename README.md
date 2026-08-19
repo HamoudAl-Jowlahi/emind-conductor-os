@@ -1,20 +1,28 @@
-# Founder OS
+# eMind Conductor OS
 
 **A personal operating system for a one-person business: a live web command
 center that runs your company as a set of AI-assisted "departments."**
 
-Founder OS turns the tabs, tools, and mental overhead of running a solo business
-into one screen: unified comms, a client funnel, social growth, finances, a
-knowledge graph, and a roster of named AI agents that each own a real job.
+eMind Conductor OS turns the tabs, tools, and mental overhead of running a solo
+business into one screen: unified comms, a client funnel, social growth,
+finances, a knowledge graph, and a roster of named AI agents that each own a
+real job.
 
-This repository is the **open-source demo build**. It ships seeded with
-realistic placeholder data, so every page is alive out of the box with no
-accounts, no API keys, and nothing to configure. It's the same system taught,
-live, in the [Founder OS cohort](https://www.thefounderos.com); this repo lets
-you explore and run it yourself.
+It ships seeded with realistic placeholder data, so every page is alive out of
+the box with no accounts, no API keys, and nothing to configure. Connect real
+services when you're ready — the connection board never reports a service as
+live until it actually is.
 
-> Want to build your own, live, with guidance? That's what the cohort is for.
-> [thefounderos.com](https://www.thefounderos.com)
+## Credits
+
+This project is a fork of the **Founder OS** open-source demo build, taught live
+in the [Founder OS cohort](https://www.thefounderos.com). It is used, modified,
+and redistributed under the MIT License; the original copyright notice is
+retained in [LICENSE](LICENSE).
+
+Changes in this fork: rebrand to eMind Conductor OS (new mark, `emind` default
+theme), a Next.js 14 → 16 migration, operator identity extracted to a single
+env-configured module, and added SRS / usage / roadmap documentation.
 
 ---
 
@@ -222,9 +230,12 @@ social numbers are **placeholder data**. Nothing here is real.
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE).
+MIT — see [`LICENSE`](LICENSE).
+
+This is a fork. The MIT terms require the original copyright notice to travel
+with every copy or substantial portion of the software, so keep `LICENSE`
+intact if you fork this in turn.
 
 ---
 
-Built as the reference implementation for **Founder OS**.
-[thefounderos.com](https://www.thefounderos.com)
+**eMind Conductor OS** — forked from [Founder OS](https://www.thefounderos.com).
