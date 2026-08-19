@@ -1,16 +1,22 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
-import { chat, llmStatus } from '@/lib/connectors/llm';
+import { chat, getLlmProvider, llmStatus } from '@/lib/connectors/llm';
 
 const KEY = 'AI_GATEWAY_API_KEY';
+const GKEY = 'GOOGLE_API_KEY';
 const prevKey = process.env[KEY];
+const prevGKey = process.env[GKEY];
 const prevProvider = process.env.LLM_PROVIDER;
 
+const restore = (name: string, prev: string | undefined) => {
+  if (prev === undefined) delete process.env[name];
+  else process.env[name] = prev;
+};
+
 afterEach(() => {
-  if (prevKey === undefined) delete process.env[KEY];
-  else process.env[KEY] = prevKey;
-  if (prevProvider === undefined) delete process.env.LLM_PROVIDER;
-  else process.env.LLM_PROVIDER = prevProvider;
+  restore(KEY, prevKey);
+  restore(GKEY, prevGKey);
+  restore('LLM_PROVIDER', prevProvider);
   vi.restoreAllMocks();
 });
 
@@ -94,5 +100,47 @@ describe('stub provider chat — deterministic, no network', () => {
     expect(calledWith).not.toBe('NOT_CALLED');
     expect(res.toolCalls.map((c) => c.name)).toContain('lookup');
     expect(res.toolCalls[0].result).toEqual({ ok: true, value: 42 });
+  });
+});
+
+/**
+ * The Vercel gateway will not serve a request until a card unlocks its free
+ * credits. Google AI Studio has no such gate, so `LLM_PROVIDER=google` is the
+ * escape hatch for anyone who cannot or will not put a card on file. It is a
+ * peer of the gateway, not a replacement: same LlmProvider shape, same tool
+ * contract, selected purely by env.
+ */
+describe('google provider — the no-credit-card path', () => {
+  test('LLM_PROVIDER=google selects it, and it is not the gateway', () => {
+    process.env.LLM_PROVIDER = 'google';
+    process.env[GKEY] = 'test-google-key';
+    expect(getLlmProvider().name).toBe('google');
+  });
+
+  test('not_configured when the provider is google but no key is set', async () => {
+    process.env.LLM_PROVIDER = 'google';
+    delete process.env[GKEY];
+    const status = await llmStatus();
+    expect(status.state).toBe('not_configured');
+    expect(status.detail).toMatch(/GOOGLE_API_KEY/);
+  });
+
+  test('connected when Google answers the model listing', async () => {
+    process.env.LLM_PROVIDER = 'google';
+    process.env[GKEY] = 'test-google-key';
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ models: [{ name: 'models/gemini-3.6-flash' }] }), { status: 200 }),
+    );
+    const status = await llmStatus();
+    expect(status.state).toBe('connected');
+    expect(status.detail).toMatch(/gemini/i);
+  });
+
+  test('error when Google rejects the key — never a fake connected', async () => {
+    process.env.LLM_PROVIDER = 'google';
+    process.env[GKEY] = 'bad-key';
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('nope', { status: 403 }));
+    const status = await llmStatus();
+    expect(status.state).toBe('error');
   });
 });

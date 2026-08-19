@@ -1,14 +1,19 @@
 /**
- * LLM connector — backs agent & Conductor chat through the Vercel AI Gateway.
+ * LLM connector — backs agent & Conductor chat.
  *
- * Mirrors the brain.ts provider shape: a real `gateway` provider (default) that
- * calls the AI SDK with a `"provider/model"` string, plus a `stub` provider
- * (LLM_PROVIDER=stub) that is deterministic and makes NO network call — so the
- * whole agent-chat stack is testable offline. Status stays honest: no
- * AI_GATEWAY_API_KEY ⇒ not_configured, never a fake "connected".
+ * Mirrors the brain.ts provider shape. Three providers, chosen by LLM_PROVIDER:
+ *   gateway (default) — Vercel AI Gateway, "provider/model" strings. Note it
+ *     refuses every request until a card unlocks its free credits.
+ *   google            — Google AI Studio. No billing gate, so this is the
+ *     path when a card is not an option. Same tool contract.
+ *   stub              — deterministic, makes NO network call, so the whole
+ *     agent-chat stack stays testable offline.
+ *
+ * Status stays honest for all three: a key that cannot actually serve reports
+ * `error` with the real reason, never a fake "connected".
  */
 import { z } from 'zod';
-import { CRED_FILES, resolveCred } from '@/lib/creds';
+import { CRED_FILES, resolveCred, runtimeEnv } from '@/lib/creds';
 import type { ConnectorStatus } from '@/lib/connectors/types';
 
 export type LlmRole = 'system' | 'user' | 'assistant' | 'tool';
@@ -39,6 +44,18 @@ export interface LlmProvider {
 
 const GATEWAY_KEY = 'AI_GATEWAY_API_KEY';
 const DEFAULT_MODEL = process.env.LLM_MODEL ?? 'anthropic/claude-sonnet-5';
+
+/** Google AI Studio: no card required, unlike the Vercel gateway. */
+const GOOGLE_DEFAULT_MODEL = process.env.GOOGLE_MODEL ?? 'gemini-3.6-flash';
+const GOOGLE_MODELS_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+
+/** GOOGLE_API_KEY, or GEMINI_API_KEY for anyone who names it that way. */
+function resolveGoogleKey(): string | undefined {
+  return (
+    resolveCred('GOOGLE_API_KEY', [CRED_FILES.agentsEnv, CRED_FILES.socialMedia]) ??
+    resolveCred('GEMINI_API_KEY', [CRED_FILES.agentsEnv, CRED_FILES.socialMedia])
+  );
+}
 
 /** process.env first (Next auto-loads .env.local), then Alex's cred files. */
 function resolveGatewayKey(): string | undefined {
@@ -115,9 +132,74 @@ export function createGatewayProvider(model: string = DEFAULT_MODEL): LlmProvide
   };
 }
 
+/**
+ * Google AI Studio provider — the no-credit-card path.
+ *
+ * Same shape and same tool contract as the gateway provider; only the model
+ * binding differs, so `chatTools()` keeps working untouched. Reaches for the
+ * official @ai-sdk/google adapter rather than hand-rolling the REST call,
+ * which is what keeps multi-step tool use identical across providers.
+ */
+export function createGoogleProvider(model: string = GOOGLE_DEFAULT_MODEL): LlmProvider {
+  return {
+    name: 'google',
+    async chat(req) {
+      const key = resolveGoogleKey();
+      if (!key) {
+        throw new Error('GOOGLE_API_KEY is not set — add it to .env.local to enable agent chat.');
+      }
+      const { generateText, tool, stepCountIs } = await import('ai');
+      const { createGoogleGenerativeAI } = await import('@ai-sdk/google');
+      const google = createGoogleGenerativeAI({ apiKey: key });
+
+      const tools = Object.fromEntries(
+        (req.tools ?? []).map((t) => [
+          t.name,
+          tool({ description: t.description, inputSchema: t.parameters, execute: t.execute }),
+        ]),
+      );
+      const messages = req.messages
+        .filter((m) => m.role !== 'tool')
+        .map((m) => ({ role: m.role as 'system' | 'user' | 'assistant', content: m.content }));
+
+      const result = await generateText({
+        model: google(req.model ?? model),
+        system: req.system,
+        messages,
+        tools: req.tools?.length ? tools : undefined,
+        stopWhen: stepCountIs(6),
+      });
+
+      const toolCalls: LlmToolCall[] = [];
+      for (const step of result.steps ?? []) {
+        const calls = step.toolCalls ?? [];
+        const results = step.toolResults ?? [];
+        for (const c of calls) {
+          // Match by id, not position — a failed tool result leaves the arrays
+          // different lengths and positional pairing attaches the wrong output.
+          const hit = results.find((r) => r.toolCallId === c.toolCallId);
+          toolCalls.push({ name: c.toolName, args: c.input, result: hit?.output });
+        }
+      }
+      return { text: result.text, toolCalls };
+    },
+  };
+}
+
+/**
+ * Which provider is active. Reads the fresh .env.local overlay, not just
+ * process.env: keys already resolve that way, so selecting a provider had to
+ * as well — otherwise pasting LLM_PROVIDER=google took a server restart while
+ * the key beside it took effect immediately.
+ */
+export function llmProviderName(): string {
+  return runtimeEnv().LLM_PROVIDER ?? 'gateway';
+}
+
 export function getLlmProvider(): LlmProvider {
-  const name = process.env.LLM_PROVIDER ?? 'gateway';
+  const name = llmProviderName();
   if (name === 'stub') return stubLlmProvider;
+  if (name === 'google') return createGoogleProvider();
   return createGatewayProvider();
 }
 
@@ -138,9 +220,41 @@ const CREDITS_TIMEOUT_MS = 4000;
  */
 export async function llmStatus(): Promise<ConnectorStatus> {
   const base = { id: 'llm', name: 'LLM (Gateway)', kind: 'orchestration' } as const;
-  if (process.env.LLM_PROVIDER === 'stub') {
+  const provider = llmProviderName();
+  if (provider === 'stub') {
     return { ...base, state: 'connected', detail: 'stub provider active (tests)' };
   }
+
+  // Google AI Studio has no billing gate, so presence of a working key is the
+  // whole story — but "working" still has to be asked, not assumed.
+  if (provider === 'google') {
+    const gkey = resolveGoogleKey();
+    if (!gkey) {
+      return {
+        ...base,
+        state: 'not_configured',
+        detail: 'Set GOOGLE_API_KEY in .env.local to enable agent chat via Google AI Studio.',
+      };
+    }
+    try {
+      const res = await fetch(GOOGLE_MODELS_URL, {
+        headers: { 'x-goog-api-key': gkey },
+        signal: AbortSignal.timeout(CREDITS_TIMEOUT_MS),
+      });
+      if (!res.ok) {
+        return { ...base, state: 'error', detail: `Google rejected the key (HTTP ${res.status}) — check GOOGLE_API_KEY.` };
+      }
+      return {
+        ...base,
+        state: 'connected',
+        detail: `Google AI Studio · default model ${GOOGLE_DEFAULT_MODEL}`,
+        meta: { provider: 'google', model: GOOGLE_DEFAULT_MODEL },
+      };
+    } catch (err) {
+      return { ...base, state: 'error', detail: `Google unreachable: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }
+
   const key = resolveGatewayKey();
   if (!key) {
     return {
