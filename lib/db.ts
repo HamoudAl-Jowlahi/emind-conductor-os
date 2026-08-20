@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { isValidCron } from '@/lib/cron';
+import { OWNED_TABLES } from '@/lib/tenancy';
 import {
   AgentCronSchema,
   AgentMessageSchema,
@@ -347,6 +348,26 @@ function migrateAgentsTable(db: InstanceType<typeof Database>): void {
 }
 
 /**
+ * Add user_id (plus its index) to every table that holds one person's data.
+ *
+ * By ALTER rather than in the DDL so existing databases upgrade in place — the
+ * same pattern the agents and funnel tables already use. The column is
+ * nullable on purpose: rows that predate multi-user have no owner yet, and
+ * `claimOrphanRows` assigns them rather than this guessing.
+ *
+ * The index is not an afterthought. Once every read carries `WHERE user_id =
+ * ?`, an unindexed column turns each of them into a scan that grows with the
+ * number of users on the install.
+ */
+function migrateOwnedTables(db: InstanceType<typeof Database>): void {
+  for (const table of OWNED_TABLES) {
+    const cols = new Set((db.pragma(`table_info(${table})`) as { name: string }[]).map((c) => c.name));
+    if (!cols.has('user_id')) db.exec(`ALTER TABLE ${table} ADD COLUMN user_id TEXT`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_${table}_user ON ${table}(user_id)`);
+  }
+}
+
+/**
  * Users who predate the agent catalog had all built-in agents implicitly.
  * Emptying their roster on upgrade would be a silent regression, so they are
  * backfilled once — here, in the migration, and nowhere else.
@@ -439,6 +460,7 @@ export function openDb(path: string) {
   db.exec(DDL);
   migrateAgentsTable(db);
   migrateAgentCronsTable(db);
+  migrateOwnedTables(db);
   migrateUserRosters(db);
   migrateFunnelContactsTable(db);
   migrateSkillsTable(db);
@@ -1291,7 +1313,25 @@ export function openDb(path: string) {
     },
   };
 
+  /**
+   * Assign every ownerless row to a user — the upgrade path for an install
+   * whose data predates multi-user: those rows belong to whoever was already
+   * using it. A no-op once nothing is orphaned, so a second user never
+   * inherits the first user's business.
+   */
+  function claimOrphanRows(userId: string): void {
+    const claim = db.transaction(() => {
+      for (const table of OWNED_TABLES) {
+        db.prepare(`UPDATE ${table} SET user_id = ? WHERE user_id IS NULL`).run(userId);
+      }
+    });
+    claim();
+  }
+
   return {
+    /** Escape hatch for migrations and tests. Application code uses the repos. */
+    raw: db,
+    claimOrphanRows,
     users,
     sessions,
     userAgents,
