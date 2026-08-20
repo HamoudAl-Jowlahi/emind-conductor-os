@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/data';
 import { createRuntime } from '@/lib/agents/runtime';
-import { currentUser } from '@/lib/session';
+import { currentUser, withCurrentUserSecrets } from '@/lib/session';
 import { runtimeRosterFor } from '@/lib/agents/roster';
 
 export const dynamic = 'force-dynamic';
@@ -28,6 +28,6 @@ export async function POST(req: Request) {
   // supplied — somebody else's, on a shared install.
   const db = getDb().withUser(user.id);
   const runtime = createRuntime(db, runtimeRosterFor(db, user.id));
-  const broadcast = await runtime.broadcast(message);
+  const broadcast = await withCurrentUserSecrets(() => runtime.broadcast(message));
   return NextResponse.json({ broadcast });
 }

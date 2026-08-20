@@ -68,7 +68,7 @@ export async function manychatStatus(
     return {
       ...base,
       state: 'not_configured',
-      detail: 'Set MANYCHAT_API_KEY in .env.local (ManyChat → Settings → API).',
+      detail: 'Set MANYCHAT_API_KEY in Connections (ManyChat → Settings → API).',
     };
   }
   const now = Date.now();

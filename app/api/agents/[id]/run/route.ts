@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/data';
 import { createRuntime } from '@/lib/agents/runtime';
-import { currentUser } from '@/lib/session';
+import { currentUser, withCurrentUserSecrets } from '@/lib/session';
 import { runtimeRosterFor } from '@/lib/agents/roster';
 
 export const dynamic = 'force-dynamic';
@@ -16,7 +16,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const db = getDb().withUser(user.id);
   const runtime = createRuntime(db, runtimeRosterFor(db, user.id));
   try {
-    const run = await runtime.run(id);
+    // The agent runs against ITS OWNER'S credentials, not the install's.
+    const run = await withCurrentUserSecrets(() => runtime.run(id));
     return NextResponse.json({ run });
   } catch (err) {
     return NextResponse.json(

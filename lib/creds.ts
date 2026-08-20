@@ -1,6 +1,31 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+/**
+ * The signed-in user's decrypted credentials, for the duration of one request.
+ *
+ * Connectors resolve keys deep inside their own modules — twelve files call
+ * `resolveCred` or `runtimeEnv` — so threading a userId through every one of
+ * them would touch far more code than it protects, and the first connector
+ * added afterwards would forget. Instead the request establishes the context
+ * once and both resolvers consult it.
+ *
+ * Empty context means "no user", which is correct for seeding, migrations and
+ * the unscoped scheduler pass: those fall back to the install-level env.
+ */
+const credentialContext = new AsyncLocalStorage<Record<string, string>>();
+
+/** Run `fn` with this user's vault overlaid on the environment. */
+export function withUserSecrets<T>(secrets: Record<string, string>, fn: () => T): T {
+  return credentialContext.run(secrets, fn);
+}
+
+/** The vault of whoever this request belongs to, or an empty map. */
+export function contextSecrets(): Record<string, string> {
+  return credentialContext.getStore() ?? {};
+}
 
 /**
  * Credential resolution for connectors. Alex's keys already live in
@@ -120,11 +145,18 @@ export function removeEnvLocal(keys: string[]): void {
 /** process.env with a fresh .env.local overlay — hand this to connectors that
  *  take an env record so a just-pasted key connects without a restart. */
 export function runtimeEnv(): Record<string, string | undefined> {
-  return { ...process.env, ...readEnvLocal() };
+  // The user's own vault wins: on a shared install their key must beat any
+  // install-level value, or their agents would silently run on the operator's
+  // account.
+  return { ...process.env, ...readEnvLocal(), ...contextSecrets() };
 }
 
 /** Fresh .env.local first, then process.env, then each env file in order. */
 export function resolveCred(name: string, files: string[]): string | undefined {
+  // The signed-in user's own key first — see runtimeEnv on why it outranks
+  // everything the install provides.
+  const fromUser = contextSecrets()[name];
+  if (fromUser) return fromUser;
   const fromLocal = readEnvLocal()[name];
   if (fromLocal) return fromLocal;
   const fromEnv = process.env[name];

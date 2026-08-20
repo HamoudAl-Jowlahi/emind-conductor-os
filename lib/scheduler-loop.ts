@@ -39,7 +39,13 @@ async function tick(): Promise<void> {
       // A scoped handle per user: the runs this fires are recorded as theirs.
       const scoped = db.withUser(user);
       const runtime = createRuntime(scoped, runtimeRosterFor(scoped, user));
-      fired += await runDueCrons(scoped, runtime, now, user);
+      // Scheduled runs resolve that user's own credentials, exactly as a
+      // manual run does — otherwise a cron would quietly use the install's.
+      const { withUserSecrets } = await import('@/lib/creds');
+      const { secretsFor } = await import('@/lib/vault');
+      fired += await withUserSecrets(secretsFor(db, user), () =>
+        runDueCrons(scoped, runtime, now, user),
+      );
     }
     if (fired > 0) console.log(`[scheduler] fired ${fired} scheduled run(s)`);
   } catch (err) {

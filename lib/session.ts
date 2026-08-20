@@ -108,3 +108,21 @@ export async function currentDbOrNull() {
   const { forUser } = await import('@/lib/db-scoped');
   return forUser(getDb(), user.id);
 }
+
+/**
+ * Run `fn` with the signed-in user's credentials in scope.
+ *
+ * This is what makes an agent use ITS OWNER'S keys: connectors resolve through
+ * lib/creds, which consults the request's credential context, and this is the
+ * only thing that establishes it. Outside a session it runs `fn` unchanged, so
+ * install-level env still works for scripts and seeding.
+ */
+export async function withCurrentUserSecrets<T>(fn: () => Promise<T>): Promise<T> {
+  const user = await currentUser();
+  if (!user) return fn();
+  const [{ withUserSecrets }, { secretsFor }] = await Promise.all([
+    import('@/lib/creds'),
+    import('@/lib/vault'),
+  ]);
+  return withUserSecrets(secretsFor(getDb(), user.id), fn);
+}

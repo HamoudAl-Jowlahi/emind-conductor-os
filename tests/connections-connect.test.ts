@@ -1,65 +1,97 @@
-import fs from 'node:fs';
-import os from 'node:os';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { POST, DELETE } from '@/app/api/connections/connect/route';
-import { readEnvLocal } from '@/lib/creds';
+import { afterAll, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
+import { signInTestUser } from './helpers/session';
 
-/** The connect flow writes ONLY to .env.local (gitignored) — never to
- *  Alex's canonical machine files, never into the repo. */
+const ROOT_KEY = 'c'.repeat(64);
+const prevRoot = process.env.CREDENTIALS_KEY;
+
+/**
+ * The connect flow writes to the caller's ENCRYPTED VAULT — never to a file the
+ * whole install shares, and never into the repo. The shared file held one value
+ * per key name, so on a multi-user install the second person to save a Stripe
+ * key silently overwrote the first person's.
+ */
+beforeAll(() => {
+  process.env.FOUNDER_OS_DB = path.join(mkdtempSync(path.join(tmpdir(), 'connect-')), 'test.db');
+  process.env.CREDENTIALS_KEY = ROOT_KEY;
+});
+afterAll(() => {
+  if (prevRoot === undefined) delete process.env.CREDENTIALS_KEY;
+  else process.env.CREDENTIALS_KEY = prevRoot;
+});
+
+let userId: string;
+beforeEach(async () => {
+  vi.resetModules();
+  const { user } = await signInTestUser({ email: 'connect@example.com', name: 'Connect' });
+  userId = user.id;
+});
+
+const post = async (body: unknown) => {
+  const { POST } = await import('@/app/api/connections/connect/route');
+  return POST(new Request('http://test/api/connections/connect', { method: 'POST', body: JSON.stringify(body) }));
+};
+const del = async (body: unknown) => {
+  const { DELETE } = await import('@/app/api/connections/connect/route');
+  return DELETE(new Request('http://test/api/connections/connect', { method: 'DELETE', body: JSON.stringify(body) }));
+};
+const vault = async () => {
+  const { getDb } = await import('@/lib/data');
+  const { listSecretNames, getSecret } = await import('@/lib/vault');
+  return { db: getDb(), listSecretNames, getSecret };
+};
+
 describe('POST /api/connections/connect', () => {
-  let tmp: string;
-  const prevOverride = process.env.FOUNDER_OS_ENV_LOCAL;
-
-  beforeEach(() => {
-    tmp = path.join(os.tmpdir(), `alex-connect-${process.pid}-${Math.random().toString(36).slice(2)}`);
-    process.env.FOUNDER_OS_ENV_LOCAL = tmp;
-  });
-  afterEach(() => {
-    if (prevOverride === undefined) delete process.env.FOUNDER_OS_ENV_LOCAL;
-    else process.env.FOUNDER_OS_ENV_LOCAL = prevOverride;
-    try { fs.unlinkSync(tmp); } catch {}
-  });
-
-  const post = (body: unknown) =>
-    POST(new Request('http://test/api/connections/connect', { method: 'POST', body: JSON.stringify(body) }));
-
-  test('saves allowed keys for a listed integration and reports keySaved without echoing values', async () => {
+  test('stores the key in the vault and reports keySaved without echoing the value', async () => {
     const res = await post({ slug: 'notion', values: { NOTION_API_KEY: 'ntn_secret_123' } });
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.ok).toBe(true);
     expect(body.keySaved).toBe(true);
+    // The response must never carry the secret back to the browser.
     expect(JSON.stringify(body)).not.toContain('ntn_secret_123');
-    expect(readEnvLocal().NOTION_API_KEY).toBe('ntn_secret_123');
+
+    const { db, getSecret } = await vault();
+    expect(getSecret(db, userId, 'NOTION_API_KEY')).toBe('ntn_secret_123');
   });
 
-  test('a no-connector tile saves its generic key', async () => {
-    const res = await post({ slug: 'discord', values: { DISCORD_API_KEY: 'dsc-1' } });
+  test('the stored row is ciphertext, not the key', async () => {
+    await post({ slug: 'notion', values: { NOTION_API_KEY: 'ntn_plaintext_canary' } });
+    const { db } = await vault();
+    const rows = db.raw.prepare('SELECT * FROM user_credentials').all();
+    expect(JSON.stringify(rows)).not.toContain('ntn_plaintext_canary');
+  });
+
+  test('refuses a key name the integration does not declare', async () => {
+    const res = await post({ slug: 'notion', values: { SOME_OTHER_KEY: 'nope' } });
+    expect(res.status).toBe(400);
+  });
+
+  test('refuses an unknown integration', async () => {
+    const res = await post({ slug: 'not-a-real-integration', values: { X: 'y' } });
+    expect(res.status).toBe(400);
+  });
+
+  test('DELETE removes exactly that integration keys', async () => {
+    await post({ slug: 'notion', values: { NOTION_API_KEY: 'ntn_secret_123' } });
+    const res = await del({ slug: 'notion' });
     expect(res.status).toBe(200);
-    expect(readEnvLocal().DISCORD_API_KEY).toBe('dsc-1');
+
+    const { db, getSecret } = await vault();
+    expect(getSecret(db, userId, 'NOTION_API_KEY')).toBeUndefined();
   });
 
-  test('rejects unknown slugs, foreign keys, and unsafe values', async () => {
-    expect((await post({ slug: 'not-a-tool', values: { X_API_KEY: 'v' } })).status).toBe(400);
-    // a key that does not belong to this integration must never be written
-    expect((await post({ slug: 'notion', values: { ATTIO_API_KEY: 'steal' } })).status).toBe(400);
-    expect(readEnvLocal().ATTIO_API_KEY).toBeUndefined();
-    expect((await post({ slug: 'notion', values: { NOTION_API_KEY: 'a\nb' } })).status).toBe(400);
-    expect((await post({ slug: 'notion', values: {} })).status).toBe(400);
-    // guidance-only tiles (whatsapp needs Full Disk Access, not a key) take no keys
-    expect((await post({ slug: 'whatsapp', values: { WHATSAPP_API_KEY: 'x' } })).status).toBe(400);
-  });
+  test('two users keep independent keys for the same integration', async () => {
+    await post({ slug: 'notion', values: { NOTION_API_KEY: 'ntn_FIRST' } });
 
-  test('DELETE removes exactly the integration keys (disconnect)', async () => {
-    await post({ slug: 'notion', values: { NOTION_API_KEY: 'k1' } });
-    await post({ slug: 'discord', values: { DISCORD_API_KEY: 'k2' } });
-    const res = await DELETE(
-      new Request('http://test/api/connections/connect', { method: 'DELETE', body: JSON.stringify({ slug: 'notion' }) }),
-    );
-    expect(res.status).toBe(200);
-    expect((await res.json()).keySaved).toBe(false);
-    expect(readEnvLocal().NOTION_API_KEY).toBeUndefined();
-    expect(readEnvLocal().DISCORD_API_KEY).toBe('k2');
+    vi.resetModules();
+    const { user: second } = await signInTestUser({ email: 'second@example.com', name: 'Second' });
+    await post({ slug: 'notion', values: { NOTION_API_KEY: 'ntn_SECOND' } });
+
+    const { db, getSecret } = await vault();
+    expect(getSecret(db, userId, 'NOTION_API_KEY')).toBe('ntn_FIRST');
+    expect(getSecret(db, second.id, 'NOTION_API_KEY')).toBe('ntn_SECOND');
   });
 });

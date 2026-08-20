@@ -15,7 +15,7 @@ export async function notionStatus(env: Record<string, string | undefined> = pro
       name: 'Notion',
       kind: 'notion',
       state: 'not_configured',
-      detail: 'Set NOTION_API_KEY (internal integration secret) in .env.local and share target pages with it.',
+      detail: 'Set NOTION_API_KEY (internal integration secret) in Connections and share target pages with it.',
     };
   }
   try {

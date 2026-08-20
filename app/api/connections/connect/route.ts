@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { INTEGRATIONS, connectKeysFor } from '@/lib/integrations-catalog';
-import { readEnvLocal, upsertEnvLocal, removeEnvLocal } from '@/lib/creds';
+import { getDb } from '@/lib/data';
+import { currentUser } from '@/lib/session';
+import { putSecret, removeSecret, listSecretNames, vaultReady } from '@/lib/vault';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,9 +54,23 @@ export async function POST(req: Request) {
     }
   }
 
-  upsertEnvLocal(Object.fromEntries(names.map((k) => [k, body.values[k].trim()])));
-  const saved = readEnvLocal();
-  const keySaved = [...allowed].every((k) => Boolean(saved[k]));
+  // Keys land in the caller's own encrypted vault, not in a file the whole
+  // install shares. On a shared install that file held one value per name, so
+  // the second user to save a key overwrote the first user's.
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ ok: false, error: 'Not authenticated.' }, { status: 401 });
+  if (!vaultReady()) {
+    return NextResponse.json(
+      { ok: false, error: 'The credential vault has no root key — set CREDENTIALS_KEY.' },
+      { status: 503 },
+    );
+  }
+
+  const db = getDb();
+  for (const k of names) putSecret(db, user.id, k, body.values[k].trim());
+
+  const saved = new Set(listSecretNames(db, user.id));
+  const keySaved = [...allowed].every((k) => saved.has(k));
   return NextResponse.json({ ok: true, keySaved, partial: !keySaved });
 }
 
@@ -67,6 +83,10 @@ export async function DELETE(req: Request) {
   }
   const entry = entryFor(body.slug);
   if (!entry) return NextResponse.json({ ok: false, error: 'unknown integration' }, { status: 400 });
-  removeEnvLocal(connectKeysFor(entry));
+
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ ok: false, error: 'Not authenticated.' }, { status: 401 });
+  const db = getDb();
+  for (const k of connectKeysFor(entry)) removeSecret(db, user.id, k);
   return NextResponse.json({ ok: true, keySaved: false });
 }

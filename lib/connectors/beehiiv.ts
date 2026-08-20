@@ -58,7 +58,7 @@ export async function beehiivStatus(
       name: 'Beehiiv (Email List)',
       kind: 'social',
       state: 'not_configured',
-      detail: 'Set BEEHIIV_API_KEY + BEEHIIV_PUBLICATION_ID in .env.local.',
+      detail: 'Set BEEHIIV_API_KEY + BEEHIIV_PUBLICATION_ID in Connections.',
     };
   }
   try {

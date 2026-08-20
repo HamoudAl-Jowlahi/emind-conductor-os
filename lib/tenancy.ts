@@ -22,7 +22,7 @@ export const SHARED_TABLES = [
 ] as const;
 
 /** Identity and membership — scoped by construction, not by a added column. */
-export const IDENTITY_TABLES = ['users', 'sessions', 'user_agents', 'agent_crons'] as const;
+export const IDENTITY_TABLES = ['users', 'sessions', 'user_agents', 'agent_crons', 'user_credentials'] as const;
 
 /** One person's business. Every read MUST be filtered by user_id. */
 export const OWNED_TABLES = [

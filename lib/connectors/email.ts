@@ -47,7 +47,7 @@ export async function sendEmailReply(
   env: Record<string, string | undefined> = process.env,
 ): Promise<{ ok: boolean; error?: string }> {
   const inboxes = parseInboxConfigs(env);
-  if (inboxes.length === 0) return { ok: false, error: 'no inbox configured (set INBOX_n_* in .env.local)' };
+  if (inboxes.length === 0) return { ok: false, error: 'no inbox configured (set INBOX_n_* in Connections)' };
   if (!reply.to || reply.to.trim() === '') return { ok: false, error: 'no recipient address' };
   const cfg = inboxes.find((i) => i.id === reply.accountId) ?? inboxes[0];
   try {
@@ -153,7 +153,7 @@ export async function emailStatus(env: Record<string, string | undefined> = proc
       name: 'Email Inboxes',
       kind: 'email',
       state: 'not_configured',
-      detail: 'No inboxes configured. Set INBOX_1_HOST / _USER / _PASS (up to 4 slots) in .env.local.',
+      detail: 'No inboxes configured. Set INBOX_1_HOST / _USER / _PASS (up to 4 slots) in Connections.',
       meta: { configured: 0, slots: MAX_INBOXES },
     };
   }

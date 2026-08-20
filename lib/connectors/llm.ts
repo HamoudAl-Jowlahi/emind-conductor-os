@@ -233,7 +233,7 @@ export async function llmStatus(): Promise<ConnectorStatus> {
       return {
         ...base,
         state: 'not_configured',
-        detail: 'Set GOOGLE_API_KEY in .env.local to enable agent chat via Google AI Studio.',
+        detail: 'Set GOOGLE_API_KEY in Connections to enable agent chat via Google AI Studio.',
       };
     }
     try {
@@ -260,7 +260,7 @@ export async function llmStatus(): Promise<ConnectorStatus> {
     return {
       ...base,
       state: 'not_configured',
-      detail: 'Set AI_GATEWAY_API_KEY in .env.local to enable agent chat via the Vercel AI Gateway.',
+      detail: 'Set AI_GATEWAY_API_KEY in Connections to enable agent chat via the Vercel AI Gateway.',
     };
   }
 

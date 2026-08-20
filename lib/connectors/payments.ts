@@ -189,7 +189,7 @@ export async function paymentsStatus(env: Record<string, string | undefined> = p
       name: 'Payment Processors',
       kind: 'payments',
       state: 'not_configured',
-      detail: `None of ${processors.length} processors configured. Start with STRIPE_SECRET_KEY in .env.local.`,
+      detail: `None of ${processors.length} processors configured. Start with STRIPE_SECRET_KEY in Connections.`,
       meta: { configured: 0, known: processors.length },
     };
   }

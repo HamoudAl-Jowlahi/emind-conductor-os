@@ -15,7 +15,7 @@ export async function slackStatus(env: Record<string, string | undefined> = proc
       name: 'Slack',
       kind: 'slack',
       state: 'not_configured',
-      detail: 'Set SLACK_BOT_TOKEN (xoxb-…) in .env.local. Needs channels:read, channels:history, users:read scopes.',
+      detail: 'Set SLACK_BOT_TOKEN (xoxb-…) in Connections. Needs channels:read, channels:history, users:read scopes.',
     };
   }
   try {

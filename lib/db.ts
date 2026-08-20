@@ -319,6 +319,15 @@ CREATE TABLE IF NOT EXISTS user_agents (
   installed_at TEXT NOT NULL,
   PRIMARY KEY (user_id, agent_id)
 );
+CREATE TABLE IF NOT EXISTS user_credentials (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  key_name TEXT NOT NULL,
+  ciphertext TEXT NOT NULL,
+  iv TEXT NOT NULL,
+  auth_tag TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, key_name)
+);
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1288,6 +1297,43 @@ function buildRepos(db: InstanceType<typeof Database>, userId: string | null) {
     },
   };
 
+  /**
+   * Encrypted credentials, one row per user per key name. Nothing here is
+   * readable without the root key, and every method is scoped by user_id —
+   * there is deliberately no way to ask for "all credentials".
+   */
+  const userCredentials = {
+    put(userId: string, name: string, sealed: { ciphertext: string; iv: string; authTag: string }): void {
+      db.prepare(
+        `INSERT INTO user_credentials (user_id, key_name, ciphertext, iv, auth_tag, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, key_name) DO UPDATE SET
+           ciphertext = excluded.ciphertext, iv = excluded.iv,
+           auth_tag = excluded.auth_tag, updated_at = excluded.updated_at`,
+      ).run(userId, name, sealed.ciphertext, sealed.iv, sealed.authTag, new Date().toISOString());
+    },
+    get(userId: string, name: string): { ciphertext: string; iv: string; authTag: string } | null {
+      const r: any = db
+        .prepare('SELECT ciphertext, iv, auth_tag FROM user_credentials WHERE user_id = ? AND key_name = ?')
+        .get(userId, name);
+      return r ? { ciphertext: r.ciphertext, iv: r.iv, authTag: r.auth_tag } : null;
+    },
+    all(userId: string): { name: string; sealed: { ciphertext: string; iv: string; authTag: string } }[] {
+      return (db
+        .prepare('SELECT key_name, ciphertext, iv, auth_tag FROM user_credentials WHERE user_id = ? ORDER BY key_name')
+        .all(userId) as any[])
+        .map((r) => ({ name: r.key_name, sealed: { ciphertext: r.ciphertext, iv: r.iv, authTag: r.auth_tag } }));
+    },
+    names(userId: string): string[] {
+      return (db
+        .prepare('SELECT key_name FROM user_credentials WHERE user_id = ? ORDER BY key_name')
+        .all(userId) as { key_name: string }[]).map((r) => r.key_name);
+    },
+    remove(userId: string, name: string): void {
+      db.prepare('DELETE FROM user_credentials WHERE user_id = ? AND key_name = ?').run(userId, name);
+    },
+  };
+
   const sessions = {
     insert(s: Session): void {
       db.prepare(
@@ -1357,6 +1403,7 @@ function buildRepos(db: InstanceType<typeof Database>, userId: string | null) {
     users,
     sessions,
     userAgents,
+    userCredentials,
     departments,
     agents,
     tools,

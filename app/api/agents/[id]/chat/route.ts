@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/data';
-import { currentUser } from '@/lib/session';
+import { currentUser, withCurrentUserSecrets } from '@/lib/session';
 import { runtimeRosterFor } from '@/lib/agents/roster';
 import { chatWithAgent } from '@/lib/agents/chat';
 import { routeConductorMessage } from '@/lib/agents/conductor';
@@ -36,9 +36,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   try {
-    const result = isConductor
-      ? await routeConductorMessage(db, roster, message, { screenContext })
-      : await chatWithAgent(db, roster, id, message, { screenContext });
+    const result = await withCurrentUserSecrets(() =>
+      isConductor
+        ? routeConductorMessage(db, roster, message, { screenContext })
+        : chatWithAgent(db, roster, id, message, { screenContext }),
+    );
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });

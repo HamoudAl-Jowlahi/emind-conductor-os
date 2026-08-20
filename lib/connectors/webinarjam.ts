@@ -32,7 +32,7 @@ export async function webinarjamStatus(fetchFn: Fetch = fetch): Promise<Connecto
     return {
       ...base,
       state: 'not_configured',
-      detail: 'Set WEBINARJAM_API_KEY in .env.local to pull Launchpad Cohort webinar registrants & attendees.',
+      detail: 'Set WEBINARJAM_API_KEY in Connections to pull Launchpad Cohort webinar registrants & attendees.',
     };
   }
   try {
