@@ -1,4 +1,4 @@
-import { currentOperator } from '@/lib/session';
+import { currentOperator, currentRoster } from '@/lib/session';
 import Link from 'next/link';
 import { ArrowUpRight, Zap } from 'lucide-react';
 import { getDb } from '@/lib/data';
@@ -136,7 +136,7 @@ export default async function HomePage() {
     syncFromZernioLive(db),
   ]).then(([c, o, f, p]) => [c, o, f, p] as const);
 
-  const agents = db.agents.all();
+  const agents = await currentRoster();
   const departments = new Map(db.departments.all().map((d) => [d.id, d.name]));
   const recentRuns = db.agentRuns.recent(40);
   // Wider pull just for the runs/day sparkline — 40 may not span a week.

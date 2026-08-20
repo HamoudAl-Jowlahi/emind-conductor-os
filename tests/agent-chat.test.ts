@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
+import { signInTestUser } from './helpers/session';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -38,6 +39,8 @@ describe('POST /api/agents/[id]/chat', () => {
   });
 
   test('returns the reply and the conversation', async () => {
+    vi.resetModules();
+    await signInTestUser();
     const { POST } = await import('@/app/api/agents/[id]/chat/route');
     const res = await POST(
       new Request('http://localhost/api/agents/data-agent/chat', {
@@ -55,6 +58,8 @@ describe('POST /api/agents/[id]/chat', () => {
   });
 
   test('404s for an unknown agent', async () => {
+    vi.resetModules();
+    await signInTestUser();
     const { POST } = await import('@/app/api/agents/[id]/chat/route');
     const res = await POST(
       new Request('http://localhost/api/agents/nope/chat', { method: 'POST', body: JSON.stringify({ message: 'hi' }) }),
@@ -64,6 +69,8 @@ describe('POST /api/agents/[id]/chat', () => {
   });
 
   test('400s on an empty message', async () => {
+    vi.resetModules();
+    await signInTestUser();
     const { POST } = await import('@/app/api/agents/[id]/chat/route');
     const res = await POST(
       new Request('http://localhost/api/agents/data-agent/chat', { method: 'POST', body: JSON.stringify({ message: '  ' }) }),

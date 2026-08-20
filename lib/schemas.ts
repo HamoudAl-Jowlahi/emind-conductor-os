@@ -266,6 +266,8 @@ export const AgentCronSchema = z.object({
   createdAt: z.string().min(1),
   /** Minute-truncated ISO of the last firing; null until it has ever run. */
   lastRunAt: z.string().nullable().default(null),
+  /** Owner. Null only for rows that predate multi-user schedules. */
+  userId: z.string().nullable().default(null),
 });
 
 export const SocialPlatformSchema = z.enum(['instagram', 'tiktok', 'twitter', 'youtube', 'linkedin']);
@@ -615,3 +617,19 @@ export const SessionSchema = z.object({
   expiresAt: z.string().min(1),
 });
 export type Session = z.infer<typeof SessionSchema>;
+
+/**
+ * One agent installed into one user's roster. `source` distinguishes a
+ * catalog agent (implementation lives in code) from one the user created
+ * from a form; both live here so a roster is a single list, not two.
+ */
+export const UserAgentSchema = z.object({
+  userId: z.string().min(1),
+  agentId: z.string().min(1),
+  source: z.enum(['builtin', 'custom']),
+  enabled: z.boolean(),
+  config: z.record(z.string(), z.unknown()).default({}),
+  installedAt: z.string().min(1),
+});
+export type UserAgent = z.infer<typeof UserAgentSchema>;
+export type UserAgentInput = z.input<typeof UserAgentSchema>;

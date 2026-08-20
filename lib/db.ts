@@ -32,6 +32,7 @@ import {
   ToolSchema,
   UserSchema,
   SessionSchema,
+  UserAgentSchema,
   type Agent,
   type AgentCron,
   type AgentCronInput,
@@ -66,6 +67,8 @@ import {
   type Tool,
   type User,
   type Session,
+  type UserAgent,
+  type UserAgentInput,
 } from '@/lib/schemas';
 
 const DDL = `
@@ -177,7 +180,8 @@ CREATE TABLE IF NOT EXISTS agent_crons (
   description TEXT NOT NULL,
   enabled INTEGER NOT NULL,
   created_at TEXT NOT NULL,
-  last_run_at TEXT
+  last_run_at TEXT,
+  user_id TEXT
 );
 CREATE TABLE IF NOT EXISTS contact_tags (
   person TEXT NOT NULL,
@@ -305,6 +309,15 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS user_agents (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  agent_id TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'builtin',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  config TEXT NOT NULL DEFAULT '{}',
+  installed_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, agent_id)
+);
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -333,12 +346,36 @@ function migrateAgentsTable(db: InstanceType<typeof Database>): void {
   if (!columns.has('instance')) db.exec("ALTER TABLE agents ADD COLUMN instance TEXT NOT NULL DEFAULT 'builtin'");
 }
 
+/**
+ * Users who predate the agent catalog had all built-in agents implicitly.
+ * Emptying their roster on upgrade would be a silent regression, so they are
+ * backfilled once — here, in the migration, and nowhere else.
+ */
+function migrateUserRosters(db: InstanceType<typeof Database>): void {
+  const userIds = (db.prepare('SELECT id FROM users').all() as { id: string }[]).map((u) => u.id);
+  if (userIds.length === 0) return;
+  const now = new Date().toISOString();
+  const hasRows = db.prepare('SELECT 1 FROM user_agents WHERE user_id = ? LIMIT 1');
+  const agentIds = (db.prepare('SELECT id FROM agents').all() as { id: string }[]).map((a) => a.id);
+  const insert = db.prepare(
+    `INSERT INTO user_agents (user_id, agent_id, source, enabled, config, installed_at)
+     VALUES (?, ?, 'builtin', 1, '{}', ?) ON CONFLICT(user_id, agent_id) DO NOTHING`,
+  );
+  for (const userId of userIds) {
+    if (hasRows.get(userId)) continue;
+    for (const agentId of agentIds) insert.run(userId, agentId, now);
+  }
+}
+
 /** Databases created before the scheduler landed have no last-fired column. */
 function migrateAgentCronsTable(db: InstanceType<typeof Database>): void {
   const columns = new Set(
     (db.pragma('table_info(agent_crons)') as { name: string }[]).map((c) => c.name),
   );
   if (!columns.has('last_run_at')) db.exec('ALTER TABLE agent_crons ADD COLUMN last_run_at TEXT');
+  // Schedules belong to a user, not to the install. Without this a cron would
+  // fire once for every user who happens to have that agent installed.
+  if (!columns.has('user_id')) db.exec('ALTER TABLE agent_crons ADD COLUMN user_id TEXT');
 }
 
 /** Databases created before the funnel-space build lack these columns. */
@@ -402,6 +439,7 @@ export function openDb(path: string) {
   db.exec(DDL);
   migrateAgentsTable(db);
   migrateAgentCronsTable(db);
+  migrateUserRosters(db);
   migrateFunnelContactsTable(db);
   migrateSkillsTable(db);
 
@@ -724,6 +762,7 @@ export function openDb(path: string) {
     AgentCronSchema.parse({
       id: r.id, agentId: r.agent_id, schedule: r.schedule, description: r.description,
       enabled: Boolean(r.enabled), createdAt: r.created_at, lastRunAt: r.last_run_at ?? null,
+      userId: r.user_id ?? null,
     });
 
   const agentCrons = {
@@ -731,8 +770,8 @@ export function openDb(path: string) {
       AgentCronSchema.parse(c);
       if (!isValidCron(c.schedule)) throw new Error(`invalid cron schedule: ${c.schedule}`);
       db.prepare(
-        'INSERT OR REPLACE INTO agent_crons (id, agent_id, schedule, description, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-      ).run(c.id, c.agentId, c.schedule, c.description, c.enabled ? 1 : 0, c.createdAt);
+        'INSERT OR REPLACE INTO agent_crons (id, agent_id, schedule, description, enabled, created_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ).run(c.id, c.agentId, c.schedule, c.description, c.enabled ? 1 : 0, c.createdAt, c.userId ?? null);
     },
     byAgent(agentId: string): AgentCron[] {
       return db
@@ -742,6 +781,13 @@ export function openDb(path: string) {
     },
     all(): AgentCron[] {
       return db.prepare('SELECT * FROM agent_crons ORDER BY created_at DESC, rowid DESC').all().map(rowToCron);
+    },
+    /** Schedules owned by one user — what the scheduler iterates. */
+    forUser(userId: string): AgentCron[] {
+      return db
+        .prepare('SELECT * FROM agent_crons WHERE user_id = ? ORDER BY created_at DESC, rowid DESC')
+        .all(userId)
+        .map(rowToCron);
     },
     setEnabled(id: string, enabled: boolean): void {
       db.prepare('UPDATE agent_crons SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
@@ -1130,9 +1176,75 @@ export function openDb(path: string) {
       if (!r) return null;
       return { user: rowToUser(r), passwordHash: r.password_hash };
     },
+    /** Ids only — the scheduler iterates these; it needs no other field. */
+    allIds(): string[] {
+      return (db.prepare('SELECT id FROM users').all() as { id: string }[]).map((u) => u.id);
+    },
     byId(id: string): User | null {
       const r: any = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
       return r ? rowToUser(r) : null;
+    },
+  };
+
+  const rowToUserAgent = (r: any): UserAgent =>
+    UserAgentSchema.parse({
+      userId: r.user_id,
+      agentId: r.agent_id,
+      source: r.source,
+      enabled: Boolean(r.enabled),
+      config: JSON.parse(r.config || '{}'),
+      installedAt: r.installed_at,
+    });
+
+  /**
+   * A user's installed agents. Every read here is scoped by user_id — this is
+   * the table the whole multi-user model rests on, so there is deliberately no
+   * unscoped `all()` to reach for by accident.
+   */
+  const userAgents = {
+    forUser(userId: string): UserAgent[] {
+      return db
+        .prepare('SELECT * FROM user_agents WHERE user_id = ? ORDER BY installed_at')
+        .all(userId)
+        .map(rowToUserAgent);
+    },
+    get(userId: string, agentId: string): UserAgent | null {
+      const r: any = db
+        .prepare('SELECT * FROM user_agents WHERE user_id = ? AND agent_id = ?')
+        .get(userId, agentId);
+      return r ? rowToUserAgent(r) : null;
+    },
+    /** Idempotent: installing twice keeps one row and preserves enabled state. */
+    install(ua: UserAgentInput): void {
+      const parsed = UserAgentSchema.parse(ua);
+      db.prepare(
+        `INSERT INTO user_agents (user_id, agent_id, source, enabled, config, installed_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, agent_id) DO NOTHING`,
+      ).run(
+        parsed.userId,
+        parsed.agentId,
+        parsed.source,
+        parsed.enabled ? 1 : 0,
+        JSON.stringify(parsed.config),
+        parsed.installedAt,
+      );
+    },
+    uninstall(userId: string, agentId: string): void {
+      db.prepare('DELETE FROM user_agents WHERE user_id = ? AND agent_id = ?').run(userId, agentId);
+    },
+    setEnabled(userId: string, agentId: string, enabled: boolean): void {
+      db.prepare('UPDATE user_agents SET enabled = ? WHERE user_id = ? AND agent_id = ?').run(
+        enabled ? 1 : 0,
+        userId,
+        agentId,
+      );
+    },
+    /** Install counts per agent — the raw material for the owner dashboard. */
+    installCounts(): { agentId: string; installs: number }[] {
+      return db
+        .prepare('SELECT agent_id AS agentId, COUNT(*) AS installs FROM user_agents GROUP BY agent_id')
+        .all() as { agentId: string; installs: number }[];
     },
   };
 
@@ -1182,6 +1294,7 @@ export function openDb(path: string) {
   return {
     users,
     sessions,
+    userAgents,
     departments,
     agents,
     tools,

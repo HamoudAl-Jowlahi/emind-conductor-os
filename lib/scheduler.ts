@@ -18,10 +18,15 @@ import type { FounderDb } from '@/lib/db';
 import type { AgentRuntime } from '@/lib/agents/runtime';
 import type { AgentCron } from '@/lib/schemas';
 
-/** Enabled schedules matching this minute that have not already fired in it. */
-export function dueCrons(db: FounderDb, now: Date = new Date()): AgentCron[] {
+/**
+ * Enabled schedules matching this minute that have not already fired in it.
+ * Pass a userId to get only that user's schedules — which is how the loop
+ * runs them, since a schedule belongs to a person, not to the install.
+ */
+export function dueCrons(db: FounderDb, now: Date = new Date(), userId?: string): AgentCron[] {
   const minute = nextMinute(now);
-  return db.agentCrons.all().filter((c) => {
+  const crons = userId ? db.agentCrons.forUser(userId) : db.agentCrons.all();
+  return crons.filter((c) => {
     if (!c.enabled) return false;
     if (!cronMatches(c.schedule, now)) return false;
     return c.lastRunAt !== minute;
@@ -37,8 +42,9 @@ export async function runDueCrons(
   db: FounderDb,
   runtime: AgentRuntime,
   now: Date = new Date(),
+  userId?: string,
 ): Promise<number> {
-  const due = dueCrons(db, now);
+  const due = dueCrons(db, now, userId);
   const minute = nextMinute(now);
 
   for (const cron of due) {

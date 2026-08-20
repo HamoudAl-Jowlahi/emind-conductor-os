@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/data';
-import { realAgents } from '@/lib/agents/real';
+import { currentUser } from '@/lib/session';
+import { runtimeRosterFor } from '@/lib/agents/roster';
 import { chatWithAgent } from '@/lib/agents/chat';
 import { routeConductorMessage } from '@/lib/agents/conductor';
 
@@ -9,6 +10,9 @@ export const runtime = 'nodejs'; // better-sqlite3 is native — keep off the ed
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+  const roster = runtimeRosterFor(getDb(), user.id);
   let message = '';
   let screenContext: string | undefined;
   try {
@@ -26,14 +30,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // downstream failure (gateway error, Zod throw, …) surfaces honestly as a 500
   // instead of masquerading as "unknown agent".
   const isConductor = id === 'conductor';
-  if (!isConductor && !realAgents.some((a) => a.id === id)) {
+  if (!isConductor && !roster.some((a) => a.id === id)) {
     return NextResponse.json({ error: `unknown agent: ${id}` }, { status: 404 });
   }
 
   try {
     const result = isConductor
-      ? await routeConductorMessage(getDb(), realAgents, message, { screenContext })
-      : await chatWithAgent(getDb(), realAgents, id, message, { screenContext });
+      ? await routeConductorMessage(getDb(), roster, message, { screenContext })
+      : await chatWithAgent(getDb(), roster, id, message, { screenContext });
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });

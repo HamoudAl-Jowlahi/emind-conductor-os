@@ -1,3 +1,6 @@
+import Link from 'next/link';
+import { LayoutGrid } from 'lucide-react';
+import { currentRoster } from '@/lib/session';
 import { getDb } from '@/lib/data';
 import { PageHeader } from '@/components/PageHeader';
 import { AgentChat } from '@/components/AgentChat';
@@ -106,10 +109,10 @@ function AgentRosterCard({
   );
 }
 
-export default function AgentsPage() {
+export default async function AgentsPage() {
   const db = getDb();
   const departments = db.departments.all();
-  const agents = db.agents.all();
+  const agents = await currentRoster();
   const agentsById = new Map(agents.map((a) => [a.id, a]));
   const agentNames = Object.fromEntries(agents.map((a) => [a.id, a.name]));
   const activity = recentActivity(db, 40);
@@ -122,8 +125,34 @@ export default function AgentsPage() {
     <div>
       <PageHeader
         eyebrow="runtime"
-        title="Real Agents"
+        title="Your crew"
+        right={
+          <Link
+            href="/agents/catalog"
+            className="flex items-center gap-1.5 border border-os-border px-3 py-1.5 font-mono text-[9.5px] font-bold uppercase tracking-[0.16em] text-os-muted transition-colors hover:border-os-text hover:text-os-text"
+          >
+            <LayoutGrid className="h-3 w-3" />
+            Browse catalog
+          </Link>
+        }
       />
+
+      {agents.length === 0 && (
+        <div className="mt-6 border border-os-border bg-os-surface p-8 text-center">
+          <p className="text-[13px] text-os-text">Your crew is empty.</p>
+          <p className="mx-auto mt-2 max-w-[46ch] text-[12px] leading-relaxed text-os-muted">
+            Agents are opt-in: install the ones that match how you work rather than carrying every
+            agent on offer.
+          </p>
+          <Link
+            href="/agents/catalog"
+            className="mt-5 inline-flex items-center gap-1.5 border border-os-accent bg-os-accent px-4 py-2 font-mono text-[9.5px] font-bold uppercase tracking-[0.16em] text-os-accent-ink transition-opacity hover:opacity-90"
+          >
+            <LayoutGrid className="h-3 w-3" />
+            Browse the catalog
+          </Link>
+        </div>
+      )}
 
       <div className="mb-6">
         <ConductorChat agentNames={agentNames} />

@@ -1,4 +1,5 @@
-import { beforeAll, describe, expect, test } from 'vitest';
+import { beforeAll, describe, expect, test, vi } from 'vitest';
+import { signInTestUser } from './helpers/session';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -41,6 +42,8 @@ describe('API route handlers', () => {
   });
 
   test('POST /api/agents/[id]/run executes a real agent and persists the run', async () => {
+    vi.resetModules();
+    await signInTestUser();
     const { POST } = await import('@/app/api/agents/[id]/run/route');
     const res = await POST(new Request('http://localhost/api/agents/data-agent/run', { method: 'POST' }), {
       params: Promise.resolve({ id: 'data-agent' }),
@@ -69,6 +72,8 @@ describe('API route handlers', () => {
   });
 
   test('POST /api/agents/broadcast fans a message out to every agent', async () => {
+    vi.resetModules();
+    await signInTestUser();
     const { POST } = await import('@/app/api/agents/broadcast/route');
     const res = await POST(
       new Request('http://localhost/api/agents/broadcast', {

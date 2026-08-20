@@ -15,7 +15,7 @@
  */
 import { getDb } from '@/lib/data';
 import { createRuntime } from '@/lib/agents/runtime';
-import { realAgents } from '@/lib/agents/real';
+import { runtimeRosterFor } from '@/lib/agents/roster';
 import { runDueCrons } from '@/lib/scheduler';
 
 const TICK_MS = 60_000;
@@ -25,10 +25,20 @@ declare global {
   var __emindScheduler: { timer: NodeJS.Timeout } | undefined;
 }
 
+/**
+ * One pass per user. Each gets a runtime built from their own roster, so a
+ * schedule can only ever fire an agent that user installed — and a schedule
+ * belonging to one person never runs on another's behalf.
+ */
 async function tick(): Promise<void> {
   try {
     const db = getDb();
-    const fired = await runDueCrons(db, createRuntime(db, realAgents));
+    const now = new Date();
+    let fired = 0;
+    for (const user of db.users.allIds()) {
+      const runtime = createRuntime(db, runtimeRosterFor(db, user));
+      fired += await runDueCrons(db, runtime, now, user);
+    }
     if (fired > 0) console.log(`[scheduler] fired ${fired} scheduled run(s)`);
   } catch (err) {
     // A broken tick must never kill the timer — the next minute gets a clean try.

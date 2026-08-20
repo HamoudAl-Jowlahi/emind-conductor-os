@@ -18,6 +18,9 @@ type PageEntry = {
   // remain assignable to this generic invoker.
   load: () => Promise<{ default: (props?: any) => unknown }>;
   props?: unknown;
+  /** Pages behind the session guard redirect an anonymous visitor instead of
+   *  rendering. Asserting a render would mean the guard had gone. */
+  requiresAuth?: boolean;
 };
 
 // Every app/**/page.tsx, with the props each needs to be invoked.
@@ -29,6 +32,7 @@ const PAGES: PageEntry[] = [
   { file: 'social/beehiiv/page.tsx', load: () => import('@/app/(app)/social/beehiiv/page') },
   { file: 'content/page.tsx', load: () => import('@/app/(app)/content/page') },
   { file: 'agents/page.tsx', load: () => import('@/app/(app)/agents/page') },
+  { file: 'agents/catalog/page.tsx', load: () => import('@/app/(app)/agents/catalog/page'), requiresAuth: true },
   { file: 'tasks/page.tsx', load: () => import('@/app/(app)/tasks/page') },
   { file: 'skills/page.tsx', load: () => import('@/app/(app)/skills/page') },
   { file: 'org/page.tsx', load: () => import('@/app/(app)/org/page'), props: { searchParams: Promise.resolve({}) } },
@@ -57,9 +61,15 @@ describe('platform smoke — every page renders without throwing', () => {
   // 20s: pages that shell out to the gbrain CLI or distill the brain-store
   // (/, /brain) legitimately exceed vitest's 5s default under a loaded
   // parallel suite — this is a does-it-throw net, not a performance gate.
-  test.each(PAGES)('$file renders', async ({ load, props }) => {
+  test.each(PAGES)('$file renders', async ({ load, props, requiresAuth }) => {
     const mod = await load();
     const Page = mod.default;
+    if (requiresAuth) {
+      // next/navigation's redirect() signals by throwing NEXT_REDIRECT. Turning
+      // an anonymous visitor away IS the pass condition here.
+      await expect(Promise.resolve(Page(props))).rejects.toThrow(/NEXT_REDIRECT/);
+      return;
+    }
     // Server components run their body (DB reads, data fetch) when invoked;
     // a throw here is exactly the failure we want to catch.
     await expect(Promise.resolve(Page(props))).resolves.toBeTruthy();

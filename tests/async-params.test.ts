@@ -9,6 +9,7 @@
  * future refactor can't quietly revert to synchronous access.
  */
 import { describe, expect, test, beforeEach, vi } from 'vitest';
+import { signInTestUser } from './helpers/session';
 
 process.env.FOUNDER_OS_DB = ':memory:';
 process.env.LLM_PROVIDER = 'stub';
@@ -19,6 +20,7 @@ beforeEach(() => {
 
 describe('Next 16 async params — API route handlers', () => {
   test('POST /api/agents/[id]/run resolves the agent id from a promise', async () => {
+    await signInTestUser();
     const { POST } = await import('@/app/api/agents/[id]/run/route');
     const res = await POST(new Request('http://localhost/api/agents/markdown-auditor/run', { method: 'POST' }), {
       params: Promise.resolve({ id: 'markdown-auditor' }),
@@ -30,6 +32,7 @@ describe('Next 16 async params — API route handlers', () => {
   });
 
   test('POST /api/agents/[id]/run still 404s on a genuinely unknown agent', async () => {
+    await signInTestUser();
     const { POST } = await import('@/app/api/agents/[id]/run/route');
     const res = await POST(new Request('http://localhost/api/agents/nope/run', { method: 'POST' }), {
       params: Promise.resolve({ id: 'nope' }),

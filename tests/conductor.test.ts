@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
+import { signInTestUser } from './helpers/session';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -58,6 +59,8 @@ describe('POST /api/agents/conductor/chat', () => {
   });
 
   test('routes through the conductor and returns routedTo + reply', async () => {
+    vi.resetModules();
+    await signInTestUser();
     const { POST } = await import('@/app/api/agents/[id]/chat/route');
     const res = await POST(
       new Request('http://localhost/api/agents/conductor/chat', {

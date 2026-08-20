@@ -63,3 +63,23 @@ export const sessionCookieOptions = {
   path: '/',
   maxAge: Math.floor(SESSION_TTL_MS / 1000),
 } as const;
+
+/* ── Roster helpers ────────────────────────────────────────────────────────
+ * Server-side shortcuts so a page never has to resolve the user itself and
+ * then remember to scope the query. Ask for the roster; get the right one. */
+
+/** This request's active agents, as rows. Empty when signed out. */
+export async function currentRoster() {
+  const user = await currentUser();
+  if (!user) return [];
+  const { rosterFor } = await import('@/lib/agents/roster');
+  return rosterFor(getDb(), user.id);
+}
+
+/** This request's active agents, executable. Empty when signed out. */
+export async function currentRuntimeRoster() {
+  const user = await currentUser();
+  if (!user) return [];
+  const { runtimeRosterFor } = await import('@/lib/agents/roster');
+  return runtimeRosterFor(getDb(), user.id);
+}

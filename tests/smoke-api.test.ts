@@ -13,6 +13,9 @@ type RouteEntry = {
   load: () => Promise<{ GET?: (req: Request, ctx?: any) => unknown }>;
   url: string; // includes any required query params
   params?: Promise<Record<string, string>>; // dynamic [param] routes — Next 16 hands these in as a promise
+  /** Routes behind the session guard: the honest answer to an anonymous
+   *  caller is 401, and asserting 200 would mean the guard had gone. */
+  requiresAuth?: boolean;
 };
 
 // Every app/api/**/route.ts that exports GET, with valid params so each returns
@@ -20,6 +23,7 @@ type RouteEntry = {
 // (connections, social/sync) must still answer 200 with honest state.
 const ROUTES: RouteEntry[] = [
   { route: 'agents', load: () => import('@/app/api/agents/route'), url: 'http://localhost/api/agents' },
+  { route: 'agents/install', load: () => import('@/app/api/agents/install/route'), url: 'http://localhost/api/agents/install', requiresAuth: true },
   { route: 'agents/activity', load: () => import('@/app/api/agents/activity/route'), url: 'http://localhost/api/agents/activity?limit=5' },
   { route: 'agents/broadcast', load: () => import('@/app/api/agents/broadcast/route'), url: 'http://localhost/api/agents/broadcast' },
   { route: 'agents/work', load: () => import('@/app/api/agents/work/route'), url: 'http://localhost/api/agents/work?agentId=data-agent' },
@@ -62,11 +66,12 @@ function discoverGetRoutes(dir: string, base = ''): string[] {
 }
 
 describe('platform smoke — every GET API route answers 200 with JSON', () => {
-  test.each(ROUTES)('GET /api/$route', async ({ load, url, params }) => {
+  test.each(ROUTES)('GET /api/$route', async ({ load, url, params, requiresAuth }) => {
     const mod = await load();
     expect(mod.GET, 'route should export GET').toBeTypeOf('function');
     const res = (await mod.GET!(new Request(url), { params })) as Response;
-    expect(res.status, `GET ${url} should be 200 (honest state, not 500/400)`).toBe(200);
+    const expected = requiresAuth ? 401 : 200;
+    expect(res.status, `GET ${url} should be ${expected}`).toBe(expected);
     const body = await res.json();
     expect(body && typeof body === 'object').toBe(true);
   }, 20_000);

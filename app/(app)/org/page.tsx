@@ -1,4 +1,4 @@
-import { currentOperator } from '@/lib/session';
+import { currentOperator, currentRoster } from '@/lib/session';
 import Link from 'next/link';
 import { Users } from 'lucide-react';
 import { getDb } from '@/lib/data';
@@ -88,7 +88,7 @@ export default async function OrgChartPage({ searchParams }: { searchParams?: Pr
   const operator = await currentOperator();
   const db = getDb();
   const departments = db.departments.all();
-  const agents = db.agents.all();
+  const agents = await currentRoster();
   // The venture lens: same roster, same DB — the switcher just changes which
   // crew lights up. No venture param = everything bright.
   const venture = getVenture(sp?.venture ?? '');
