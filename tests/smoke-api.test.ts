@@ -22,6 +22,7 @@ type RouteEntry = {
 // a real 200 (not a 400/404 for a missing arg). Live-connector routes
 // (connections, social/sync) must still answer 200 with honest state.
 const ROUTES: RouteEntry[] = [
+  { route: 'account/sessions', load: () => import('@/app/api/account/sessions/route'), url: 'http://localhost/api/account/sessions' },
   { route: 'agents', load: () => import('@/app/api/agents/route'), url: 'http://localhost/api/agents' },
   { route: 'agents/install', load: () => import('@/app/api/agents/install/route'), url: 'http://localhost/api/agents/install' },
   { route: 'agents/activity', load: () => import('@/app/api/agents/activity/route'), url: 'http://localhost/api/agents/activity?limit=5' },

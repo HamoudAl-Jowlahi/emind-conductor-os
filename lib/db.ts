@@ -1233,6 +1233,15 @@ function buildRepos(db: InstanceType<typeof Database>, userId: string | null) {
       const r: any = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
       return r ? rowToUser(r) : null;
     },
+    updateProfile(id: string, name: string, email: string): void {
+      db.prepare('UPDATE users SET name = ?, email = ? WHERE id = ?').run(name, email, id);
+    },
+    updatePasswordHash(id: string, passwordHash: string): void {
+      db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, id);
+    },
+    remove(id: string): void {
+      db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    },
   };
 
   const rowToUserAgent = (r: any): UserAgent =>
@@ -1370,6 +1379,25 @@ function buildRepos(db: InstanceType<typeof Database>, userId: string | null) {
     remove(id: string): void {
       db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
     },
+    /**
+     * One user's sessions, WITHOUT their ids. The id is the bearer token, so
+     * listing it would hand the session to anyone who can see the page.
+     */
+    byUser(userId: string): { createdAt: string; expiresAt: string }[] {
+      return (db
+        .prepare('SELECT created_at, expires_at FROM sessions WHERE user_id = ? ORDER BY created_at DESC')
+        .all(userId) as any[])
+        .map((r) => ({ createdAt: r.created_at, expiresAt: r.expires_at }));
+    },
+    /** Drop every session for this user except `keepId`. Returns how many went. */
+    removeOthers(userId: string, keepId: string): number {
+      return db
+        .prepare('DELETE FROM sessions WHERE user_id = ? AND id != ?')
+        .run(userId, keepId).changes;
+    },
+    removeAllForUser(userId: string): number {
+      return db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId).changes;
+    },
     /** Housekeeping: drop everything already past its expiry. */
     purgeExpired(): number {
       return db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(new Date().toISOString())
@@ -1383,6 +1411,30 @@ function buildRepos(db: InstanceType<typeof Database>, userId: string | null) {
    * using it. A no-op once nothing is orphaned, so a second user never
    * inherits the first user's business.
    */
+  /**
+   * Erase everything belonging to a user: their rows in every owned table,
+   * their credentials, roster and sessions. One transaction, because a
+   * half-deleted account would leave orphaned data nobody can reach or remove.
+   */
+  function purgeUserData(userId: string): void {
+    const purge = db.transaction(() => {
+      // Owned tables reference each other (touches → contacts), so any fixed
+      // delete order is wrong for some pair and would drift as tables are
+      // added. Deferring the checks to the end of the transaction lets the
+      // deletes run in any order while still refusing to commit a broken
+      // graph — SQLite provides this for exactly this case.
+      db.pragma('defer_foreign_keys = ON');
+      for (const table of OWNED_TABLES) {
+        db.prepare(`DELETE FROM ${table} WHERE user_id = ?`).run(userId);
+      }
+      db.prepare('DELETE FROM user_credentials WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM user_agents WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM agent_crons WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+    });
+    purge();
+  }
+
   function claimOrphanRows(userId: string): void {
     const claim = db.transaction(() => {
       for (const table of OWNED_TABLES) {
@@ -1400,6 +1452,7 @@ function buildRepos(db: InstanceType<typeof Database>, userId: string | null) {
     /** The same connection, seen as one user. */
     withUser: (id: string) => buildRepos(db, id),
     claimOrphanRows,
+    purgeUserData,
     users,
     sessions,
     userAgents,

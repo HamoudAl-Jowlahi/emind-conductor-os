@@ -45,6 +45,7 @@ const PAGES: PageEntry[] = [
   { file: 'roadmap/page.tsx', load: () => import('@/app/(app)/roadmap/page') },
   { file: 'analytics/page.tsx', load: () => import('@/app/(app)/analytics/page') },
   { file: 'reference/page.tsx', load: () => import('@/app/(app)/reference/page') },
+  { file: 'settings/page.tsx', load: () => import('@/app/(app)/settings/page') },
   { file: 'personas/page.tsx', load: () => import('@/app/(app)/personas/page') },
 ];
 

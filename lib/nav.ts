@@ -21,6 +21,7 @@ import {
   BarChart3,
   LayoutGrid,
   Layers,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 export type NavItem = { href: string; label: string; icon: typeof Home };
@@ -51,6 +52,7 @@ export const NAV_SYSTEM: NavItem[] = [
   { href: '/roadmap', label: 'Roadmap', icon: Map },
   { href: '/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/reference', label: 'Reference Model', icon: LayoutGrid },
+  { href: '/settings', label: 'Settings', icon: SlidersHorizontal },
 ];
 
 // At the very bottom: persona templates that can run variants of this platform.
