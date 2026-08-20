@@ -26,7 +26,7 @@ export async function POST(req: Request) {
   // Broadcast reaches this user's installed agents only. Fanning out to an
   // uninstalled one would have it reach for a connector key the user never
   // supplied — somebody else's, on a shared install.
-  const db = getDb();
+  const db = getDb().withUser(user.id);
   const runtime = createRuntime(db, runtimeRosterFor(db, user.id));
   const broadcast = await runtime.broadcast(message);
   return NextResponse.json({ broadcast });

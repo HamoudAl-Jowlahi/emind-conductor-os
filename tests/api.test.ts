@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import { signInTestUser } from './helpers/session';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -7,10 +7,18 @@ import path from 'node:path';
 // Route handlers read the DB path from FOUNDER_OS_DB at first access, so the
 // env var must be set before any handler module is imported. FUNNEL_PROVIDER
 // pins /api/funnel to the seeded set — tests never hit the live Attio API.
-beforeAll(() => {
+beforeAll(async () => {
   process.env.FOUNDER_OS_DB = path.join(mkdtempSync(path.join(tmpdir(), 'founder-os-test-')), 'test.db');
   process.env.FUNNEL_PROVIDER = 'seed';
   process.env.GBRAIN_BIN = path.join(tmpdir(), 'founder-os-no-gbrain-cli');
+});
+
+// Two tests below call vi.resetModules(), which drops the next/headers mock the
+// session helper installs. Re-signing before every test keeps each one holding
+// a live session instead of inheriting whatever the previous test left behind.
+// The stable email means they all share one user, and so one set of data.
+beforeEach(async () => {
+  await signInTestUser({ email: 'api-suite@example.com', name: 'API Suite' });
 });
 
 describe('API route handlers', () => {
@@ -43,7 +51,7 @@ describe('API route handlers', () => {
 
   test('POST /api/agents/[id]/run executes a real agent and persists the run', async () => {
     vi.resetModules();
-    await signInTestUser();
+    await signInTestUser({ email: 'api-suite@example.com', name: 'API Suite' });
     const { POST } = await import('@/app/api/agents/[id]/run/route');
     const res = await POST(new Request('http://localhost/api/agents/data-agent/run', { method: 'POST' }), {
       params: Promise.resolve({ id: 'data-agent' }),
@@ -73,7 +81,7 @@ describe('API route handlers', () => {
 
   test('POST /api/agents/broadcast fans a message out to every agent', async () => {
     vi.resetModules();
-    await signInTestUser();
+    await signInTestUser({ email: 'api-suite@example.com', name: 'API Suite' });
     const { POST } = await import('@/app/api/agents/broadcast/route');
     const res = await POST(
       new Request('http://localhost/api/agents/broadcast', {

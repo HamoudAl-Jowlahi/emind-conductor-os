@@ -1,4 +1,4 @@
-import { currentOperator, currentRoster } from '@/lib/session';
+import { currentOperator, currentRoster, currentDb } from '@/lib/session';
 import Link from 'next/link';
 import { Users } from 'lucide-react';
 import { getDb } from '@/lib/data';
@@ -86,7 +86,7 @@ function SystemCard({ href, title, caption }: { href: string; title: string; cap
 export default async function OrgChartPage({ searchParams }: { searchParams?: Promise<{ venture?: string }> }) {
   const sp = await searchParams;
   const operator = await currentOperator();
-  const db = getDb();
+  const db = await currentDb();
   const departments = db.departments.all();
   const agents = await currentRoster();
   // The venture lens: same roster, same DB — the switcher just changes which

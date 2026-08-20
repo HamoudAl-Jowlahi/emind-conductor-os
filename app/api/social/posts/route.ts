@@ -2,13 +2,18 @@ import { NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { getDb } from '@/lib/data';
+import { currentUser } from '@/lib/session';
 import { SocialPlatformSchema, type SocialPost } from '@/lib/schemas';
 
 export const dynamic = 'force-dynamic';
 
 /** The post queue, newest first. */
 export async function GET() {
-  return NextResponse.json({ posts: getDb().socialPosts.all() });
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+  // The caller's own handle — this route cannot read another user's rows.
+  const db = getDb().withUser(user.id);
+  return NextResponse.json({ posts: db.socialPosts.all() });
 }
 
 const CreateSchema = z.object({
@@ -24,6 +29,10 @@ const CreateSchema = z.object({
  * up. Wiring an actual Zernio publish is a deliberate later step.
  */
 export async function POST(request: Request) {
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+  // The caller's own handle — this route cannot read another user's rows.
+  const db = getDb().withUser(user.id);
   const parsed = CreateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
 
@@ -36,6 +45,6 @@ export async function POST(request: Request) {
     scheduledFor: parsed.data.scheduledFor ?? null,
     createdAt: new Date().toISOString(),
   };
-  getDb().socialPosts.enqueue(post);
+  db.socialPosts.enqueue(post);
   return NextResponse.json({ post }, { status: 201 });
 }

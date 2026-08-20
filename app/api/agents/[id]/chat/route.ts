@@ -12,7 +12,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
-  const roster = runtimeRosterFor(getDb(), user.id);
+  const db = getDb().withUser(user.id);
+  const roster = runtimeRosterFor(db, user.id);
   let message = '';
   let screenContext: string | undefined;
   try {
@@ -36,8 +37,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   try {
     const result = isConductor
-      ? await routeConductorMessage(getDb(), roster, message, { screenContext })
-      : await chatWithAgent(getDb(), roster, id, message, { screenContext });
+      ? await routeConductorMessage(db, roster, message, { screenContext })
+      : await chatWithAgent(db, roster, id, message, { screenContext });
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });

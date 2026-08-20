@@ -454,16 +454,35 @@ function rowToAgent(row: AgentRow): Agent {
   });
 }
 
-export function openDb(path: string) {
-  const db = new Database(path);
-  db.pragma('journal_mode = WAL');
-  db.exec(DDL);
-  migrateAgentsTable(db);
-  migrateAgentCronsTable(db);
-  migrateOwnedTables(db);
-  migrateUserRosters(db);
-  migrateFunnelContactsTable(db);
-  migrateSkillsTable(db);
+/**
+ * Build the repository layer over an open connection, scoped to one user.
+ *
+ * `userId === null` is the unscoped handle — seeding, migrations, and the
+ * scheduler iterating every user. Anything serving a request uses a scoped one
+ * via `withUser`, and the scope lives HERE, inside the queries, rather than in
+ * each caller. Thirteen call sites each remembering a WHERE clause is a leak
+ * waiting for the first one that forgets.
+ *
+ * Binding rule, uniform across every scoped statement so there is nothing to
+ * remember per query:
+ *   1. the scope condition is always LAST in the WHERE clause
+ *   2. its bind is therefore always the LAST positional argument — `sc()`
+ *   3. LIMIT takes a coerced integer inline, never a placeholder, so nothing
+ *      can bind after the scope
+ *
+ * That last rule exists because better-sqlite3 refuses to mix named and
+ * positional parameters, and a `LIMIT ?` after the scope would force one.
+ * Limits here are internal integers, never user text, and are coerced anyway.
+ */
+function buildRepos(db: InstanceType<typeof Database>, userId: string | null) {
+  /** ` AND user_id = ?` when scoped — appended to an existing WHERE. */
+  const scope = () => (userId ? ' AND user_id = ?' : '');
+  /** ` WHERE user_id = ?` when scoped — for a query with no WHERE of its own. */
+  const scopeWhere = () => (userId ? ' WHERE user_id = ?' : '');
+  /** Append the scope bind. Always last, per the rule above. */
+  const sc = (...args: unknown[]): unknown[] => (userId ? [...args, userId] : args);
+  /** Coerce a LIMIT to a safe integer for inlining. */
+  const lim = (n: number) => Math.max(0, Math.trunc(Number(n) || 0));
 
   const departments = {
     all(): Department[] {
@@ -525,8 +544,8 @@ export function openDb(path: string) {
   const roadmap = {
     all(): RoadmapItem[] {
       return db
-        .prepare('SELECT * FROM roadmap_items ORDER BY quarter, title')
-        .all()
+        .prepare(`SELECT * FROM roadmap_items${scopeWhere()} ORDER BY quarter, title`)
+        .all(...sc())
         .map((r: any) =>
           RoadmapItemSchema.parse({
             id: r.id,
@@ -540,22 +559,22 @@ export function openDb(path: string) {
     },
     insert(item: RoadmapItem): void {
       db.prepare(
-        'INSERT OR REPLACE INTO roadmap_items (id, title, quarter, status, department_id, description) VALUES (?, ?, ?, ?, ?, ?)',
-      ).run(item.id, item.title, item.quarter, item.status, item.departmentId, item.description);
+        'INSERT OR REPLACE INTO roadmap_items (id, title, quarter, status, department_id, description, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ).run(item.id, item.title, item.quarter, item.status, item.departmentId, item.description, userId);
     },
   };
 
   const metrics = {
     all(): Metric[] {
       return db
-        .prepare('SELECT * FROM metrics ORDER BY label')
-        .all()
+        .prepare(`SELECT * FROM metrics${scopeWhere()} ORDER BY label`)
+        .all(...sc())
         .map((r) => MetricSchema.parse(r));
     },
     insert(m: Metric): void {
       db.prepare(
-        'INSERT OR REPLACE INTO metrics (id, key, label, value, unit, delta, period) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      ).run(m.id, m.key, m.label, m.value, m.unit, m.delta, m.period);
+        'INSERT OR REPLACE INTO metrics (id, key, label, value, unit, delta, period, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(m.id, m.key, m.label, m.value, m.unit, m.delta, m.period, userId);
     },
   };
 
@@ -663,20 +682,20 @@ export function openDb(path: string) {
   const agentRuns = {
     byAgent(agentId: string): AgentRun[] {
       return db
-        .prepare('SELECT * FROM agent_runs WHERE agent_id = ? ORDER BY started_at DESC')
-        .all(agentId)
+        .prepare(`SELECT * FROM agent_runs WHERE agent_id = ?${scope()} ORDER BY started_at DESC`)
+        .all(...sc(agentId))
         .map(rowToRun);
     },
     recent(limit: number): AgentRun[] {
       return db
-        .prepare('SELECT * FROM agent_runs ORDER BY started_at DESC, rowid DESC LIMIT ?')
-        .all(limit)
+        .prepare(`SELECT * FROM agent_runs${scopeWhere()} ORDER BY started_at DESC, rowid DESC LIMIT ${lim(limit)}`)
+        .all(...sc())
         .map(rowToRun);
     },
     insert(run: AgentRun): void {
       db.prepare(
-        'INSERT OR REPLACE INTO agent_runs (id, agent_id, started_at, finished_at, ok, summary) VALUES (?, ?, ?, ?, ?, ?)',
-      ).run(run.id, run.agentId, run.startedAt, run.finishedAt, run.ok ? 1 : 0, run.summary);
+        'INSERT OR REPLACE INTO agent_runs (id, agent_id, started_at, finished_at, ok, summary, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ).run(run.id, run.agentId, run.startedAt, run.finishedAt, run.ok ? 1 : 0, run.summary, userId);
     },
   };
 
@@ -694,20 +713,20 @@ export function openDb(path: string) {
     insert(m: AgentMessage): void {
       const parsed = AgentMessageSchema.parse(m);
       db.prepare(
-        'INSERT OR REPLACE INTO agent_messages (id, agent_id, role, content, tool_calls, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-      ).run(parsed.id, parsed.agentId, parsed.role, parsed.content, JSON.stringify(parsed.toolCalls), parsed.createdAt);
+        'INSERT OR REPLACE INTO agent_messages (id, agent_id, role, content, tool_calls, created_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ).run(parsed.id, parsed.agentId, parsed.role, parsed.content, JSON.stringify(parsed.toolCalls), parsed.createdAt, userId);
     },
     /** Full conversation for one agent, oldest → newest (ready to replay). */
     byAgent(agentId: string): AgentMessage[] {
       return db
-        .prepare('SELECT * FROM agent_messages WHERE agent_id = ? ORDER BY created_at ASC, rowid ASC')
-        .all(agentId)
+        .prepare(`SELECT * FROM agent_messages WHERE agent_id = ?${scope()} ORDER BY created_at ASC, rowid ASC`)
+        .all(...sc(agentId))
         .map(rowToMessage);
     },
     recent(limit: number): AgentMessage[] {
       return db
-        .prepare('SELECT * FROM agent_messages ORDER BY created_at DESC, rowid DESC LIMIT ?')
-        .all(limit)
+        .prepare(`SELECT * FROM agent_messages${scopeWhere()} ORDER BY created_at DESC, rowid DESC LIMIT ${lim(limit)}`)
+        .all(...sc())
         .map(rowToMessage);
     },
   };
@@ -724,26 +743,25 @@ export function openDb(path: string) {
 
   const broadcasts = {
     insert(b: { id: string; message: string; createdAt: string }): void {
-      db.prepare('INSERT OR REPLACE INTO broadcasts (id, message, created_at) VALUES (?, ?, ?)').run(
-        b.id, b.message, b.createdAt,
-      );
+      db.prepare('INSERT OR REPLACE INTO broadcasts (id, message, created_at, user_id) VALUES (?, ?, ?, ?)').run(
+        b.id, b.message, b.createdAt, userId);
     },
     insertReply(r: BroadcastReply): void {
       db.prepare(
-        'INSERT OR REPLACE INTO broadcast_replies (id, broadcast_id, agent_id, ok, reply, finished_at) VALUES (?, ?, ?, ?, ?, ?)',
-      ).run(r.id, r.broadcastId, r.agentId, r.ok ? 1 : 0, r.reply, r.finishedAt);
+        'INSERT OR REPLACE INTO broadcast_replies (id, broadcast_id, agent_id, ok, reply, finished_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ).run(r.id, r.broadcastId, r.agentId, r.ok ? 1 : 0, r.reply, r.finishedAt, userId);
     },
     recent(limit: number): Broadcast[] {
       const rows = db
-        .prepare('SELECT * FROM broadcasts ORDER BY created_at DESC, rowid DESC LIMIT ?')
-        .all(limit) as { id: string; message: string; created_at: string }[];
-      const replyStmt = db.prepare('SELECT * FROM broadcast_replies WHERE broadcast_id = ? ORDER BY agent_id');
+        .prepare(`SELECT * FROM broadcasts${scopeWhere()} ORDER BY created_at DESC, rowid DESC LIMIT ${lim(limit)}`)
+        .all(...sc()) as { id: string; message: string; created_at: string }[];
+      const replyStmt = db.prepare(`SELECT * FROM broadcast_replies WHERE broadcast_id = ?${scope()} ORDER BY agent_id`);
       return rows.map((b) =>
         BroadcastSchema.parse({
           id: b.id,
           message: b.message,
           createdAt: b.created_at,
-          replies: replyStmt.all(b.id).map(rowToReply),
+          replies: replyStmt.all(...sc(b.id)).map(rowToReply),
         }),
       );
     },
@@ -759,24 +777,24 @@ export function openDb(path: string) {
     insert(t: AgentTask): void {
       AgentTaskSchema.parse(t);
       db.prepare(
-        'INSERT OR REPLACE INTO agent_tasks (id, agent_id, title, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-      ).run(t.id, t.agentId, t.title, t.status, t.createdAt, t.updatedAt);
+        'INSERT OR REPLACE INTO agent_tasks (id, agent_id, title, status, created_at, updated_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ).run(t.id, t.agentId, t.title, t.status, t.createdAt, t.updatedAt, userId);
     },
     byAgent(agentId: string): AgentTask[] {
       return db
-        .prepare('SELECT * FROM agent_tasks WHERE agent_id = ? ORDER BY created_at DESC, rowid DESC')
-        .all(agentId)
+        .prepare(`SELECT * FROM agent_tasks WHERE agent_id = ?${scope()} ORDER BY created_at DESC, rowid DESC`)
+        .all(...sc(agentId))
         .map(rowToTask);
     },
     all(): AgentTask[] {
-      return db.prepare('SELECT * FROM agent_tasks ORDER BY created_at DESC, rowid DESC').all().map(rowToTask);
+      return db.prepare(`SELECT * FROM agent_tasks${scopeWhere()} ORDER BY created_at DESC, rowid DESC`).all(...sc()).map(rowToTask);
     },
     setStatus(id: string, status: AgentTask['status'], updatedAt: string): void {
       AgentTaskSchema.shape.status.parse(status);
-      db.prepare('UPDATE agent_tasks SET status = ?, updated_at = ? WHERE id = ?').run(status, updatedAt, id);
+      db.prepare(`UPDATE agent_tasks SET status = ?, updated_at = ? WHERE id = ?${scope()}`).run(...sc(status, updatedAt, id));
     },
     remove(id: string): void {
-      db.prepare('DELETE FROM agent_tasks WHERE id = ?').run(id);
+      db.prepare(`DELETE FROM agent_tasks WHERE id = ?${scope()}`).run(...sc(id));
     },
   };
 
@@ -827,21 +845,21 @@ export function openDb(path: string) {
     upsert(t: ContactTag): void {
       ContactTagSchema.parse(t);
       db.prepare(
-        'INSERT INTO contact_tags (person, channel, tag, tier) VALUES (?, ?, ?, ?) ON CONFLICT(person, channel) DO UPDATE SET tag = excluded.tag, tier = excluded.tier',
-      ).run(t.person, t.channel, t.tag, t.tier);
+        'INSERT INTO contact_tags (person, channel, tag, tier, user_id) VALUES (?, ?, ?, ?, ?) ON CONFLICT(person, channel) DO UPDATE SET tag = excluded.tag, tier = excluded.tier',
+      ).run(t.person, t.channel, t.tag, t.tier, userId);
     },
     all(): ContactTag[] {
-      return (db.prepare('SELECT * FROM contact_tags ORDER BY tier, person').all() as ContactTag[]).map(
+      return (db.prepare(`SELECT * FROM contact_tags${scopeWhere()} ORDER BY tier, person`).all(...sc()) as ContactTag[]).map(
         (r) => ContactTagSchema.parse(r),
       );
     },
     byTier(tier: number): ContactTag[] {
       return (
-        db.prepare('SELECT * FROM contact_tags WHERE tier = ? ORDER BY person').all(tier) as ContactTag[]
+        db.prepare(`SELECT * FROM contact_tags WHERE tier = ?${scope()} ORDER BY person`).all(...sc(tier)) as ContactTag[]
       ).map((r) => ContactTagSchema.parse(r));
     },
     remove(person: string, channel: string): void {
-      db.prepare('DELETE FROM contact_tags WHERE person = ? AND channel = ?').run(person, channel);
+      db.prepare(`DELETE FROM contact_tags WHERE person = ? AND channel = ?${scope()}`).run(...sc(person, channel));
     },
   };
 
@@ -857,25 +875,25 @@ export function openDb(path: string) {
     upsertAccount(a: SocialAccount): void {
       SocialAccountSchema.parse(a);
       db.prepare(
-        'INSERT OR REPLACE INTO social_accounts (platform, handle, url, "order") VALUES (?, ?, ?, ?)',
-      ).run(a.platform, a.handle, a.url, a.order);
+        'INSERT OR REPLACE INTO social_accounts (platform, handle, url, "order", user_id) VALUES (?, ?, ?, ?, ?)',
+      ).run(a.platform, a.handle, a.url, a.order, userId);
     },
     accounts(): SocialAccount[] {
       return db
-        .prepare('SELECT * FROM social_accounts ORDER BY "order"')
-        .all()
+        .prepare(`SELECT * FROM social_accounts${scopeWhere()} ORDER BY "order"`)
+        .all(...sc())
         .map((r) => SocialAccountSchema.parse(r));
     },
     insertSnapshot(s: SocialSnapshot): void {
       SocialSnapshotSchema.parse(s);
       db.prepare(
-        'INSERT OR REPLACE INTO social_snapshots (platform, captured_at, followers, source) VALUES (?, ?, ?, ?)',
-      ).run(s.platform, s.capturedAt, s.followers, s.source);
+        'INSERT OR REPLACE INTO social_snapshots (platform, captured_at, followers, source, user_id) VALUES (?, ?, ?, ?, ?)',
+      ).run(s.platform, s.capturedAt, s.followers, s.source, userId);
     },
     snapshots(platform: SocialPlatform): SocialSnapshot[] {
       return db
-        .prepare('SELECT * FROM social_snapshots WHERE platform = ? ORDER BY captured_at')
-        .all(platform)
+        .prepare(`SELECT * FROM social_snapshots WHERE platform = ?${scope()} ORDER BY captured_at`)
+        .all(...sc(platform))
         .map(rowToSnapshot);
     },
     latest(): SocialSnapshot[] {
@@ -891,8 +909,8 @@ export function openDb(path: string) {
     upsertDm(d: SocialDm): void {
       SocialDmSchema.parse(d);
       db.prepare(
-        'INSERT OR REPLACE INTO social_dms (platform, count, updated_at) VALUES (?, ?, ?)',
-      ).run(d.platform, d.count, d.updatedAt);
+        'INSERT OR REPLACE INTO social_dms (platform, count, updated_at, user_id) VALUES (?, ?, ?, ?)',
+      ).run(d.platform, d.count, d.updatedAt, userId);
     },
     dms(): SocialDm[] {
       return db
@@ -907,17 +925,17 @@ export function openDb(path: string) {
     insertDmSnapshot(s: SocialDmSnapshot): void {
       SocialDmSnapshotSchema.parse(s);
       db.prepare(
-        'INSERT OR REPLACE INTO social_dm_snapshots (platform, captured_at, count, source) VALUES (?, ?, ?, ?)',
-      ).run(s.platform, s.capturedAt, s.count, s.source);
+        'INSERT OR REPLACE INTO social_dm_snapshots (platform, captured_at, count, source, user_id) VALUES (?, ?, ?, ?, ?)',
+      ).run(s.platform, s.capturedAt, s.count, s.source, userId);
     },
     dmSnapshots(platform?: SocialPlatform): SocialDmSnapshot[] {
       const rows = platform
         ? db
-            .prepare('SELECT platform, captured_at AS capturedAt, count, source FROM social_dm_snapshots WHERE platform = ? ORDER BY captured_at')
-            .all(platform)
+            .prepare(`SELECT platform, captured_at AS capturedAt, count, source FROM social_dm_snapshots WHERE platform = ?${scope()} ORDER BY captured_at`)
+            .all(...sc(platform))
         : db
-            .prepare('SELECT platform, captured_at AS capturedAt, count, source FROM social_dm_snapshots ORDER BY platform, captured_at')
-            .all();
+            .prepare(`SELECT platform, captured_at AS capturedAt, count, source FROM social_dm_snapshots${scopeWhere()} ORDER BY platform, captured_at`)
+            .all(...sc());
       return rows.map((r) => SocialDmSnapshotSchema.parse(r));
     },
     // Individual DM messages (the inbox). Fed live by POST /api/webhooks/manychat;
@@ -944,8 +962,8 @@ export function openDb(path: string) {
     insertSnapshot(s: EmailListSnapshot): void {
       EmailListSnapshotSchema.parse(s);
       db.prepare(
-        'INSERT OR REPLACE INTO email_list_snapshots (captured_at, subscribers, source) VALUES (?, ?, ?)',
-      ).run(s.capturedAt, s.subscribers, s.source);
+        'INSERT OR REPLACE INTO email_list_snapshots (captured_at, subscribers, source, user_id) VALUES (?, ?, ?, ?)',
+      ).run(s.capturedAt, s.subscribers, s.source, userId);
     },
     // Drop seed-sourced rows so a re-seed is authoritative — the real Beehiiv
     // baseline replaces any retired dummy history. Live-synced snapshots
@@ -955,14 +973,14 @@ export function openDb(path: string) {
     },
     snapshots(): EmailListSnapshot[] {
       return db
-        .prepare('SELECT captured_at AS capturedAt, subscribers, source FROM email_list_snapshots ORDER BY captured_at')
-        .all()
+        .prepare(`SELECT captured_at AS capturedAt, subscribers, source FROM email_list_snapshots${scopeWhere()} ORDER BY captured_at`)
+        .all(...sc())
         .map((r) => EmailListSnapshotSchema.parse(r));
     },
     latest(): EmailListSnapshot | null {
       const row = db
-        .prepare('SELECT captured_at AS capturedAt, subscribers, source FROM email_list_snapshots ORDER BY captured_at DESC LIMIT 1')
-        .get();
+        .prepare(`SELECT captured_at AS capturedAt, subscribers, source FROM email_list_snapshots${scopeWhere()} ORDER BY captured_at DESC LIMIT 1`)
+        .get(...sc());
       return row ? EmailListSnapshotSchema.parse(row) : null;
     },
   };
@@ -990,20 +1008,20 @@ export function openDb(path: string) {
     enqueue(p: SocialPost): void {
       SocialPostSchema.parse(p);
       db.prepare(
-        `INSERT OR REPLACE INTO social_posts (id, caption, media_url, platforms, status, scheduled_for, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      ).run(p.id, p.caption, p.mediaUrl, JSON.stringify(p.platforms), p.status, p.scheduledFor, p.createdAt);
+        `INSERT OR REPLACE INTO social_posts (id, caption, media_url, platforms, status, scheduled_for, created_at, user_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(p.id, p.caption, p.mediaUrl, JSON.stringify(p.platforms), p.status, p.scheduledFor, p.createdAt, userId);
     },
     all(): SocialPost[] {
       return db
-        .prepare('SELECT * FROM social_posts ORDER BY created_at DESC')
-        .all()
+        .prepare(`SELECT * FROM social_posts${scopeWhere()} ORDER BY created_at DESC`)
+        .all(...sc())
         .map((r) => rowToPost(r as Parameters<typeof rowToPost>[0]));
     },
     queued(): SocialPost[] {
       return db
-        .prepare("SELECT * FROM social_posts WHERE status = 'queued' ORDER BY created_at DESC")
-        .all()
+        .prepare(`SELECT * FROM social_posts WHERE status = 'queued'${scope()} ORDER BY created_at DESC`)
+        .all(...sc())
         .map((r) => rowToPost(r as Parameters<typeof rowToPost>[0]));
     },
   };
@@ -1011,8 +1029,8 @@ export function openDb(path: string) {
   const people = {
     all(): Person[] {
       return db
-        .prepare('SELECT * FROM people ORDER BY department_id, name')
-        .all()
+        .prepare(`SELECT * FROM people${scopeWhere()} ORDER BY department_id, name`)
+        .all(...sc())
         .map((r: any) =>
           PersonSchema.parse({
             id: r.id,
@@ -1026,8 +1044,8 @@ export function openDb(path: string) {
     insert(p: Person): void {
       PersonSchema.parse(p);
       db.prepare(
-        'INSERT OR REPLACE INTO people (id, department_id, name, role, tools) VALUES (?, ?, ?, ?, ?)',
-      ).run(p.id, p.departmentId, p.name, p.role, JSON.stringify(p.tools));
+        'INSERT OR REPLACE INTO people (id, department_id, name, role, tools, user_id) VALUES (?, ?, ?, ?, ?, ?)',
+      ).run(p.id, p.departmentId, p.name, p.role, JSON.stringify(p.tools), userId);
     },
     deleteWhereIdNotIn(ids: string[]): void {
       const placeholders = ids.map(() => '?').join(', ');
@@ -1038,8 +1056,8 @@ export function openDb(path: string) {
   const sopTasks = {
     all(): SopTask[] {
       return db
-        .prepare('SELECT * FROM sop_tasks ORDER BY department_id, title')
-        .all()
+        .prepare(`SELECT * FROM sop_tasks${scopeWhere()} ORDER BY department_id, title`)
+        .all(...sc())
         .map((r: any) =>
           SopTaskSchema.parse({
             id: r.id,
@@ -1055,8 +1073,8 @@ export function openDb(path: string) {
     insert(t: SopTask): void {
       SopTaskSchema.parse(t);
       db.prepare(
-        'INSERT OR REPLACE INTO sop_tasks (id, department_id, title, summary, steps, assignee_kind, assignee_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      ).run(t.id, t.departmentId, t.title, t.summary, JSON.stringify(t.steps), t.assigneeKind, t.assigneeId);
+        'INSERT OR REPLACE INTO sop_tasks (id, department_id, title, summary, steps, assignee_kind, assignee_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(t.id, t.departmentId, t.title, t.summary, JSON.stringify(t.steps), t.assigneeKind, t.assigneeId, userId);
     },
     deleteWhereIdNotIn(ids: string[]): void {
       const placeholders = ids.map(() => '?').join(', ');
@@ -1067,8 +1085,8 @@ export function openDb(path: string) {
   const workflows = {
     all(): Workflow[] {
       return db
-        .prepare('SELECT * FROM workflows ORDER BY ord, name')
-        .all()
+        .prepare(`SELECT * FROM workflows${scopeWhere()} ORDER BY ord, name`)
+        .all(...sc())
         .map((r: any) =>
           WorkflowSchema.parse({
             id: r.id,
@@ -1083,8 +1101,8 @@ export function openDb(path: string) {
     insert(w: Workflow): void {
       WorkflowSchema.parse(w);
       db.prepare(
-        'INSERT OR REPLACE INTO workflows (id, name, subtitle, revenue_usd, ord, steps) VALUES (?, ?, ?, ?, ?, ?)',
-      ).run(w.id, w.name, w.subtitle, w.revenueUsd, w.order, JSON.stringify(w.steps));
+        'INSERT OR REPLACE INTO workflows (id, name, subtitle, revenue_usd, ord, steps, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      ).run(w.id, w.name, w.subtitle, w.revenueUsd, w.order, JSON.stringify(w.steps), userId);
     },
     deleteWhereIdNotIn(ids: string[]): void {
       const placeholders = ids.map(() => '?').join(', ');
@@ -1139,23 +1157,23 @@ export function openDb(path: string) {
     insertContact(c: FunnelContact): void {
       FunnelContactSchema.parse(c);
       db.prepare(
-        'INSERT OR REPLACE INTO funnel_contacts (id, name, venture, status, product, amount_usd, relationship, likelihood, email, phone, person, company, role, linkedin, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      ).run(c.id, c.name, c.venture, c.status, c.product, c.amountUsd, c.relationship, c.likelihood, c.email, c.phone, c.person, c.company, c.role, c.linkedin, c.createdAt);
+        'INSERT OR REPLACE INTO funnel_contacts (id, name, venture, status, product, amount_usd, relationship, likelihood, email, phone, person, company, role, linkedin, created_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(c.id, c.name, c.venture, c.status, c.product, c.amountUsd, c.relationship, c.likelihood, c.email, c.phone, c.person, c.company, c.role, c.linkedin, c.createdAt, userId);
     },
     insertTouch(t: FunnelTouch): void {
       FunnelTouchSchema.parse(t);
       db.prepare(
-        'INSERT OR REPLACE INTO funnel_touches (id, contact_id, seq, stage, channel, label, source, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      ).run(t.id, t.contactId, t.seq, t.stage, t.channel, t.label, t.source, t.at);
+        'INSERT OR REPLACE INTO funnel_touches (id, contact_id, seq, stage, channel, label, source, at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      ).run(t.id, t.contactId, t.seq, t.stage, t.channel, t.label, t.source, t.at, userId);
     },
     /** Contacts with their touches in journey order, newest contact first. */
     journeys(venture?: FunnelVenture): FunnelJourney[] {
       const rows = (
         venture
-          ? db.prepare('SELECT * FROM funnel_contacts WHERE venture = ? ORDER BY created_at DESC, id').all(venture)
-          : db.prepare('SELECT * FROM funnel_contacts ORDER BY created_at DESC, id').all()
+          ? db.prepare(`SELECT * FROM funnel_contacts WHERE venture = ?${scope()} ORDER BY created_at DESC, id`).all(...sc(venture))
+          : db.prepare(`SELECT * FROM funnel_contacts${scopeWhere()} ORDER BY created_at DESC, id`).all(...sc())
       ) as any[];
-      const touchStmt = db.prepare('SELECT * FROM funnel_touches WHERE contact_id = ? ORDER BY seq');
+      const touchStmt = db.prepare(`SELECT * FROM funnel_touches WHERE contact_id = ?${scope()} ORDER BY seq`);
       return rows.map((r) =>
         FunnelJourneySchema.parse({
           id: r.id,
@@ -1173,7 +1191,7 @@ export function openDb(path: string) {
           role: r.role,
           linkedin: r.linkedin,
           createdAt: r.created_at,
-          touches: touchStmt.all(r.id).map(rowToFunnelTouch),
+          touches: touchStmt.all(...sc(r.id)).map(rowToFunnelTouch),
         }),
       );
     },
@@ -1331,6 +1349,10 @@ export function openDb(path: string) {
   return {
     /** Escape hatch for migrations and tests. Application code uses the repos. */
     raw: db,
+    /** The id this handle is scoped to, or null for the unscoped handle. */
+    scopedTo: userId,
+    /** The same connection, seen as one user. */
+    withUser: (id: string) => buildRepos(db, id),
     claimOrphanRows,
     users,
     sessions,
@@ -1359,6 +1381,19 @@ export function openDb(path: string) {
     skills,
     close: () => db.close(),
   };
+}
+
+export function openDb(path: string, userId: string | null = null) {
+  const db = new Database(path);
+  db.pragma('journal_mode = WAL');
+  db.exec(DDL);
+  migrateAgentsTable(db);
+  migrateAgentCronsTable(db);
+  migrateOwnedTables(db);
+  migrateUserRosters(db);
+  migrateFunnelContactsTable(db);
+  migrateSkillsTable(db);
+  return buildRepos(db, userId);
 }
 
 export type FounderDb = ReturnType<typeof openDb>;

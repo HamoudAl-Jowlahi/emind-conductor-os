@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/data';
+import { currentDb } from '@/lib/session';
 import { groupRoadmapByQuarter } from '@/lib/roadmap';
 import { PageHeader } from '@/components/PageHeader';
 import { Badge, SectionHead, type BadgeTone } from '@/components/terminal';
@@ -13,8 +13,8 @@ const STATUS_BADGE: Record<RoadmapStatus, { tone: BadgeTone; ghost: boolean; lab
   later: { tone: 'default', ghost: true, label: 'Later' },
 };
 
-export default function RoadmapPage() {
-  const db = getDb();
+export default async function RoadmapPage() {
+  const db = await currentDb();
   const quarters = groupRoadmapByQuarter(db.roadmap.all());
   const phases = db.phases.all();
   const departments = new Map(db.departments.all().map((d) => [d.id, d]));

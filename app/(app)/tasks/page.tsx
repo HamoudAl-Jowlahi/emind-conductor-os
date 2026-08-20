@@ -1,11 +1,11 @@
-import { getDb } from '@/lib/data';
+import { currentDb } from '@/lib/session';
 import { PageHeader } from '@/components/PageHeader';
 import { TaskBoard } from '@/components/TaskBoard';
 
 export const dynamic = 'force-dynamic';
 
-export default function TasksPage() {
-  const db = getDb();
+export default async function TasksPage() {
+  const db = await currentDb();
   const tasks = db.agentTasks.all();
   const agentNames = Object.fromEntries(db.agents.all().map((a) => [a.id, a.name]));
   return (

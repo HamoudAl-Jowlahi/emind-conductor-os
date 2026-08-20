@@ -43,6 +43,7 @@ describe('Next 16 async params — API route handlers', () => {
   });
 
   test('POST /api/agents/[id]/chat resolves the agent id from a promise', async () => {
+    await signInTestUser();
     const { POST } = await import('@/app/api/agents/[id]/chat/route');
     const res = await POST(
       new Request('http://localhost/api/agents/data-agent/chat', {
@@ -58,6 +59,7 @@ describe('Next 16 async params — API route handlers', () => {
   });
 
   test('GET /api/social/[platform] resolves the platform from a promise', async () => {
+    await signInTestUser();
     const { GET } = await import('@/app/api/social/[platform]/route');
     const res = await GET(new Request('http://localhost/api/social/instagram'), {
       params: Promise.resolve({ platform: 'instagram' }),
@@ -68,6 +70,7 @@ describe('Next 16 async params — API route handlers', () => {
   });
 
   test('GET /api/social/[platform] still 404s on an unknown platform', async () => {
+    await signInTestUser();
     const { GET } = await import('@/app/api/social/[platform]/route');
     const res = await GET(new Request('http://localhost/api/social/myspace'), {
       params: Promise.resolve({ platform: 'myspace' }),
@@ -77,6 +80,7 @@ describe('Next 16 async params — API route handlers', () => {
   });
 
   test('GET /api/skills/[slug] resolves the slug from a promise', async () => {
+    await signInTestUser();
     const { GET } = await import('@/app/api/skills/[slug]/route');
     const res = await GET(new Request('http://localhost/api/skills/does-not-exist'), {
       params: Promise.resolve({ slug: 'does-not-exist' }),

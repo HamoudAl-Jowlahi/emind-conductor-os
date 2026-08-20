@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test } from 'vitest';
+import { signInTestUser } from './helpers/session';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -37,11 +38,12 @@ describe('recentActivity', () => {
 });
 
 describe('GET /api/agents/activity', () => {
-  beforeAll(() => {
+  beforeAll(async () => {
     process.env.FOUNDER_OS_DB = path.join(mkdtempSync(path.join(tmpdir(), 'founder-os-activity-')), 'test.db');
   });
 
   test('returns an events array', async () => {
+    await signInTestUser();
     const { GET } = await import('@/app/api/agents/activity/route');
     const res = await GET(new Request('http://localhost/api/agents/activity?limit=5'));
     expect(res.status).toBe(200);

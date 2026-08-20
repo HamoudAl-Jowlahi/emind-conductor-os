@@ -1,4 +1,4 @@
-import { currentOperator, currentRoster } from '@/lib/session';
+import { currentOperator, currentRoster, currentDb } from '@/lib/session';
 import Link from 'next/link';
 import { ArrowUpRight, Zap } from 'lucide-react';
 import { getDb } from '@/lib/data';
@@ -121,7 +121,7 @@ function StatTile({
 
 export default async function HomePage() {
   const operator = await currentOperator();
-  const db = getDb();
+  const db = await currentDb();
   // Live follower sync from Zernio/Late (falls back to static config on API
   // failure) — parity with /social so the home figures are real-time too.
   // It rides the same Promise.all as the other fetches: it still finishes

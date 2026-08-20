@@ -9,6 +9,7 @@ import { slackStatus } from '@/lib/connectors/slack';
 import { whatsappStatus } from '@/lib/connectors/whatsapp';
 import { calendarStatus, caldavAccounts, upcomingEvents } from '@/lib/connectors/gcal';
 import { getDb } from '@/lib/data';
+import { currentDb } from '@/lib/session';
 import { Badge, Dot, SectionHead } from '@/components/terminal';
 
 export const dynamic = 'force-dynamic';

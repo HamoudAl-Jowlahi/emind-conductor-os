@@ -2,14 +2,18 @@ import { NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { getDb } from '@/lib/data';
+import { currentUser } from '@/lib/session';
 import { isValidCron } from '@/lib/cron';
 
 export const dynamic = 'force-dynamic';
 
 /** Tasks + cron jobs for one agent (or all agents when no id given). */
 export async function GET(request: Request) {
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+  // The caller's own handle — this route cannot read another user's rows.
+  const db = getDb().withUser(user.id);
   const agentId = new URL(request.url).searchParams.get('agentId');
-  const db = getDb();
   return NextResponse.json({
     tasks: agentId ? db.agentTasks.byAgent(agentId) : db.agentTasks.all(),
     crons: agentId ? db.agentCrons.byAgent(agentId) : db.agentCrons.all(),
@@ -27,9 +31,12 @@ const CreateSchema = z.discriminatedUnion('kind', [
 ]);
 
 export async function POST(request: Request) {
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+  // The caller's own handle — this route cannot read another user's rows.
+  const db = getDb().withUser(user.id);
   const parsed = CreateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  const db = getDb();
   const now = new Date().toISOString();
 
   if (parsed.data.kind === 'task') {
@@ -52,9 +59,12 @@ const PatchSchema = z.discriminatedUnion('kind', [
 ]);
 
 export async function PATCH(request: Request) {
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+  // The caller's own handle — this route cannot read another user's rows.
+  const db = getDb().withUser(user.id);
   const parsed = PatchSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  const db = getDb();
   if (parsed.data.kind === 'task') db.agentTasks.setStatus(parsed.data.id, parsed.data.status, new Date().toISOString());
   else db.agentCrons.setEnabled(parsed.data.id, parsed.data.enabled);
   return NextResponse.json({ ok: true });
@@ -63,9 +73,12 @@ export async function PATCH(request: Request) {
 const DeleteSchema = z.object({ kind: z.enum(['task', 'cron']), id: z.string().min(1) });
 
 export async function DELETE(request: Request) {
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+  // The caller's own handle — this route cannot read another user's rows.
+  const db = getDb().withUser(user.id);
   const parsed = DeleteSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  const db = getDb();
   if (parsed.data.kind === 'task') db.agentTasks.remove(parsed.data.id);
   else db.agentCrons.remove(parsed.data.id);
   return NextResponse.json({ ok: true });

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { LayoutGrid } from 'lucide-react';
-import { currentRoster } from '@/lib/session';
+import { currentRoster, currentDb } from '@/lib/session';
 import { getDb } from '@/lib/data';
 import { PageHeader } from '@/components/PageHeader';
 import { AgentChat } from '@/components/AgentChat';
@@ -110,7 +110,7 @@ function AgentRosterCard({
 }
 
 export default async function AgentsPage() {
-  const db = getDb();
+  const db = await currentDb();
   const departments = db.departments.all();
   const agents = await currentRoster();
   const agentsById = new Map(agents.map((a) => [a.id, a]));

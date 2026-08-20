@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test } from 'vitest';
+import { signInTestUser } from './helpers/session';
 import { mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -6,10 +7,13 @@ import path from 'node:path';
 // Pages read the DB path at first access, so point it at a fresh seeded temp DB
 // before any page module is imported. FUNNEL_PROVIDER keeps /funnel off the
 // live Attio API in tests.
-beforeAll(() => {
+beforeAll(async () => {
+  // Pages read the signed-in user's scoped handle, so the smoke net needs a
+  // session before it can render anything.
   process.env.FOUNDER_OS_DB = path.join(mkdtempSync(path.join(tmpdir(), 'founder-os-smoke-')), 'test.db');
   process.env.FUNNEL_PROVIDER = 'seed';
   process.env.GBRAIN_BIN = path.join(tmpdir(), 'founder-os-no-gbrain-cli');
+  await signInTestUser();
 });
 
 type PageEntry = {
@@ -18,9 +22,6 @@ type PageEntry = {
   // remain assignable to this generic invoker.
   load: () => Promise<{ default: (props?: any) => unknown }>;
   props?: unknown;
-  /** Pages behind the session guard redirect an anonymous visitor instead of
-   *  rendering. Asserting a render would mean the guard had gone. */
-  requiresAuth?: boolean;
 };
 
 // Every app/**/page.tsx, with the props each needs to be invoked.
@@ -32,7 +33,7 @@ const PAGES: PageEntry[] = [
   { file: 'social/beehiiv/page.tsx', load: () => import('@/app/(app)/social/beehiiv/page') },
   { file: 'content/page.tsx', load: () => import('@/app/(app)/content/page') },
   { file: 'agents/page.tsx', load: () => import('@/app/(app)/agents/page') },
-  { file: 'agents/catalog/page.tsx', load: () => import('@/app/(app)/agents/catalog/page'), requiresAuth: true },
+  { file: 'agents/catalog/page.tsx', load: () => import('@/app/(app)/agents/catalog/page') },
   { file: 'tasks/page.tsx', load: () => import('@/app/(app)/tasks/page') },
   { file: 'skills/page.tsx', load: () => import('@/app/(app)/skills/page') },
   { file: 'org/page.tsx', load: () => import('@/app/(app)/org/page'), props: { searchParams: Promise.resolve({}) } },
@@ -61,15 +62,11 @@ describe('platform smoke — every page renders without throwing', () => {
   // 20s: pages that shell out to the gbrain CLI or distill the brain-store
   // (/, /brain) legitimately exceed vitest's 5s default under a loaded
   // parallel suite — this is a does-it-throw net, not a performance gate.
-  test.each(PAGES)('$file renders', async ({ load, props, requiresAuth }) => {
+  // The signed-out guard is pinned in tests/auth.test.ts; this net signs in so
+  // it can do its own job — proving each page renders with real data.
+  test.each(PAGES)('$file renders', async ({ load, props }) => {
     const mod = await load();
     const Page = mod.default;
-    if (requiresAuth) {
-      // next/navigation's redirect() signals by throwing NEXT_REDIRECT. Turning
-      // an anonymous visitor away IS the pass condition here.
-      await expect(Promise.resolve(Page(props))).rejects.toThrow(/NEXT_REDIRECT/);
-      return;
-    }
     // Server components run their body (DB reads, data fetch) when invoked;
     // a throw here is exactly the failure we want to catch.
     await expect(Promise.resolve(Page(props))).resolves.toBeTruthy();

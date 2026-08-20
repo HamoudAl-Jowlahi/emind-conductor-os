@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/data';
+import { currentDb } from '@/lib/session';
 import { PageHeader } from '@/components/PageHeader';
 import { SkillsGrid, type SkillCard } from '@/components/SkillsGrid';
 import { readUserSkills } from '@/lib/skills-catalog';
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 const truncate = (t: string, n = 110) => (t.length > n ? `${t.slice(0, n).replace(/\s+\S*$/, '')}…` : t);
 
-export default function SkillsPage() {
+export default async function SkillsPage() {
   const real = readUserSkills();
 
   let cards: SkillCard[];
@@ -26,7 +26,7 @@ export default function SkillsPage() {
     sourceNote = `${real.length} skills read live from ~/.claude/skills — open any card to read its SKILL.md.`;
   } else {
     // Fallback: the seeded catalog (docs carried inline).
-    const db = getDb();
+    const db = await currentDb();
     const agentNames = Object.fromEntries(db.agents.all().map((a) => [a.id, a.name]));
     cards = db.skills.all().map((s) => ({
       id: s.id,

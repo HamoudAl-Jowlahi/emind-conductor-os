@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/data';
+import { currentUser } from '@/lib/session';
 import { funnelSummary, splitFunnelJourneys } from '@/lib/funnel';
 import { attioFunnelJourneys } from '@/lib/funnel-live';
 import { ghlFunnelJourneys } from '@/lib/funnel-ghl';
@@ -9,6 +10,10 @@ import { FunnelVentureSchema, type FunnelVenture } from '@/lib/schemas';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
+  // The caller's own handle — this route cannot read another user's rows.
+  const db = getDb().withUser(user.id);
   const raw = new URL(req.url).searchParams.get('venture');
   let venture: FunnelVenture | undefined;
   if (raw !== null) {
@@ -26,7 +31,7 @@ export async function GET(req: Request) {
   const isLive = liveJourneys.length > 0;
   const all = isLive
     ? mergeTrakyoTouches(liveJourneys, await trakyoTouches()).filter((j) => !venture || j.venture === venture)
-    : getDb().funnel.journeys(venture);
+    : db.funnel.journeys(venture);
   const { active, archived } = splitFunnelJourneys(all, now);
   return NextResponse.json({
     summary: funnelSummary(active),

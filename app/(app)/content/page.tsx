@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { ArrowUpRight, BarChart3, Brain, Clapperboard, ExternalLink, Play, Wrench } from 'lucide-react';
-import { getDb } from '@/lib/data';
+import { currentDb } from '@/lib/session';
 import { contentAgents } from '@/lib/content';
 import { zernioRecentPosts, zernioPostDays } from '@/lib/connectors/zernio';
 import { PageHeader } from '@/components/PageHeader';
@@ -95,7 +95,7 @@ function BacklinkCard({
 }
 
 export default async function ContentPage() {
-  const db = getDb();
+  const db = await currentDb();
   const crew = contentAgents(db.agents.all());
   const lead = crew[0] ?? null;
   const workers = lead ? crew.slice(1) : crew;

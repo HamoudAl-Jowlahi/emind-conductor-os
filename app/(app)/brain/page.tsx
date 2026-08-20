@@ -7,6 +7,7 @@ import { buildKnowledgeGraph } from '@/lib/knowledge-graph';
 import { distillMemoryGraph, type MemoryGraph } from '@/lib/memory-core';
 import { foldersToClusters } from '@/lib/brain-viz';
 import { getDb } from '@/lib/data';
+import { currentDb } from '@/lib/session';
 import { PageHeader } from '@/components/PageHeader';
 import { BrainCore } from '@/components/BrainCore';
 import { PillarRadar } from '@/components/PillarRadar';
@@ -144,7 +145,7 @@ function memoryConstellation(): MemoryGraph | undefined {
 export default async function BrainPage() {
   const overview = await createGBrainProvider().overview();
   const { store, doctor } = overview;
-  const db = getDb();
+  const db = await currentDb();
   const knowledgeGraph = buildKnowledgeGraph(db.agents.all(), db.departments.all(), db.people.all(), db.sopTasks.all());
   const maxFiles = Math.max(1, ...store.folders.map((f) => f.files));
   const clusters = foldersToClusters(store.folders);

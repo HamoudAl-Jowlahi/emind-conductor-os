@@ -36,8 +36,10 @@ async function tick(): Promise<void> {
     const now = new Date();
     let fired = 0;
     for (const user of db.users.allIds()) {
-      const runtime = createRuntime(db, runtimeRosterFor(db, user));
-      fired += await runDueCrons(db, runtime, now, user);
+      // A scoped handle per user: the runs this fires are recorded as theirs.
+      const scoped = db.withUser(user);
+      const runtime = createRuntime(scoped, runtimeRosterFor(scoped, user));
+      fired += await runDueCrons(scoped, runtime, now, user);
     }
     if (fired > 0) console.log(`[scheduler] fired ${fired} scheduled run(s)`);
   } catch (err) {

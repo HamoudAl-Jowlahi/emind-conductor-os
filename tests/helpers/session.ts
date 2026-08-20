@@ -11,7 +11,7 @@ import { vi } from 'vitest';
  * Real rows, not stubs: the route still does a genuine session lookup, so the
  * auth path stays under test instead of being mocked away.
  */
-export async function signInTestUser(opts: { email?: string; name?: string; installAll?: boolean } = {}) {
+export async function signInTestUser(opts: { email?: string; name?: string; installAll?: boolean; claimSeed?: boolean } = {}) {
   const { getDb } = await import('@/lib/data');
   const { createUser, createSession, SESSION_COOKIE } = await import('@/lib/auth');
   const { backfillRoster } = await import('@/lib/agents/roster');
@@ -23,6 +23,11 @@ export async function signInTestUser(opts: { email?: string; name?: string; inst
 
   // Most route tests predate the catalog and expect the whole roster present.
   if (opts.installAll !== false) backfillRoster(db, user.id);
+
+  // Seeded rows carry no owner until someone claims them. In a test — as on a
+  // fresh install — the first user IS the install, so they inherit that data;
+  // without this every scoped read would correctly return nothing.
+  if (opts.claimSeed !== false) db.claimOrphanRows(user.id);
 
   const token = createSession(db, user.id);
 

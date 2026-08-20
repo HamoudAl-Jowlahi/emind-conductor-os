@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
+import { signInTestUser } from './helpers/session';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -17,11 +18,13 @@ const post = (body: unknown) =>
 
 describe('POST /api/social/dm/reply', () => {
   test('400 on a missing text/subscriberId', async () => {
+    await signInTestUser();
     const { POST } = await import('@/app/api/social/dm/reply/route');
     expect((await POST(post({ subscriberId: 'ig-lead-1' }))).status).toBe(400);
   });
 
   test('honest 502 and stores nothing when ManyChat is not connected', async () => {
+    await signInTestUser();
     const { POST } = await import('@/app/api/social/dm/reply/route');
     const { getDb } = await import('@/lib/data');
     const before = getDb().social.dmMessages('instagram').filter((m) => m.direction === 'out').length;
@@ -38,6 +41,7 @@ describe('POST /api/social/dm/reply', () => {
     process.env.MANYCHAT_API_KEY = 'sk-test';
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ status: 'success' }) })));
 
+    await signInTestUser();
     const { POST } = await import('@/app/api/social/dm/reply/route');
     const { getDb } = await import('@/lib/data');
 

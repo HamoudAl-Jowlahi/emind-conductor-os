@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { getDb } from '@/lib/data';
+import { currentDb } from '@/lib/session';
 import { PageHeader } from '@/components/PageHeader';
 import { WorkflowMap } from '@/components/WorkflowMap';
 import { BrandLogo } from '@/lib/brand-logos';
@@ -7,7 +8,7 @@ import { toolBrand } from '@/lib/workflow-tool-brands';
 
 export const dynamic = 'force-dynamic';
 
-export default function WorkflowsPage() {
+export default async function WorkflowsPage() {
   const workflows = getDb().workflows.all();
   // Render the company logos here, server-side: BrandLogo pulls simple-icons,
   // which must never enter the client bundle. The map receives ready-made nodes.

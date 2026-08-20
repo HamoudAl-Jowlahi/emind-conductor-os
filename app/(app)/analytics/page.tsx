@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Instagram, Linkedin, Music2, Twitter, Youtube, type LucideIcon } from 'lucide-react';
-import { getDb } from '@/lib/data';
+import { currentDb } from '@/lib/session';
 import { buildSocialDashboard, syncFromZernioConfig, audienceGrowthPct, PLATFORM_LABELS } from '@/lib/social';
 import { agentRunVolume, runsWithin } from '@/lib/analytics';
 import { splitMetrics, type MetricInput, type MetricTile } from '@/lib/operating-metrics';
@@ -150,7 +150,7 @@ function PieCard({
 }
 
 export default async function AnalyticsPage() {
-  const db = getDb();
+  const db = await currentDb();
   syncFromZernioConfig(db);
   const today = new Date().toISOString().slice(0, 10);
 

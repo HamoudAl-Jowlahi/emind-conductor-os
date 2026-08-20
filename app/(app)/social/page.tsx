@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Instagram, Linkedin, Mail, Music2, Twitter, Youtube, type LucideIcon } from 'lucide-react';
-import { getDb } from '@/lib/data';
+import { currentDb } from '@/lib/session';
 import {
   audienceGrowth,
   audienceSeries,
@@ -83,7 +83,7 @@ function agoFrom(iso: string | null): string {
 }
 
 export default async function SocialPage() {
-  const db = getDb();
+  const db = await currentDb();
   // Live follower-count sync from Zernio/Late (falls back to static config when
   // the API is unreachable). This makes every figure on the page real-time.
   await syncFromZernioLive(db);

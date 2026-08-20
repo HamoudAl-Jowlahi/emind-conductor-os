@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { getDb } from '@/lib/data';
+import { currentDb } from '@/lib/session';
 import {
   attentionQueue,
   funnelSummary,

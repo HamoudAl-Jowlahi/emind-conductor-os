@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getDb } from '@/lib/data';
+import { currentUser } from '@/lib/session';
 import { sendManyChatText } from '@/lib/connectors/manychat';
 import type { SocialDmMessage } from '@/lib/schemas';
 
@@ -18,6 +19,11 @@ const ReplySchema = z.object({
  * a reply that didn't actually go out.
  */
 export async function POST(request: Request): Promise<Response> {
+  const user = await currentUser();
+  if (!user) return NextResponse.json({ ok: false, error: 'Not authenticated.' }, { status: 401 });
+  // The caller's own handle — this route cannot read another user's rows.
+  const db = getDb().withUser(user.id);
+
   const parsed = ReplySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ ok: false, error: parsed.error.flatten() }, { status: 400 });
@@ -28,8 +34,6 @@ export async function POST(request: Request): Promise<Response> {
   if (!result.ok) {
     return NextResponse.json({ ok: false, error: result.detail }, { status: 502 });
   }
-
-  const db = getDb();
   // Carry the display name/handle from the existing thread so the stored
   // outbound message renders consistently.
   const prior = db.social.dmMessages('instagram').find((m) => m.subscriberId === subscriberId);

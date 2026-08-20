@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getDb } from '@/lib/data';
 import { createUser, createSession, SESSION_COOKIE } from '@/lib/auth';
+import { backfillRoster } from '@/lib/agents/roster';
 import { sessionCookieOptions } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
@@ -32,6 +33,13 @@ export async function POST(req: Request) {
   }
 
   const user = createUser(db, body);
+
+  // The first user inherits the install: the seeded rows have no owner yet,
+  // and the full roster, because this account IS the install rather than a
+  // guest joining one. Later accounts start empty and pick from the catalog.
+  db.claimOrphanRows(user.id);
+  backfillRoster(db, user.id);
+
   const token = createSession(db, user.id);
   const res = NextResponse.json({ user: { name: user.name, email: user.email } });
   res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions);
