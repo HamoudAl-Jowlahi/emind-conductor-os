@@ -397,6 +397,14 @@ function migrateUserRosters(db: InstanceType<typeof Database>): void {
   }
 }
 
+/** Databases created before Google sign-in have no subject column. */
+function migrateUsersTable(db: InstanceType<typeof Database>): void {
+  const cols = new Set((db.pragma('table_info(users)') as { name: string }[]).map((c) => c.name));
+  if (!cols.has('google_sub')) db.exec('ALTER TABLE users ADD COLUMN google_sub TEXT');
+  // Unique so one Google identity can never end up on two accounts.
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL');
+}
+
 /** Databases created before the scheduler landed have no last-fired column. */
 function migrateAgentCronsTable(db: InstanceType<typeof Database>): void {
   const columns = new Set(
@@ -1242,6 +1250,14 @@ function buildRepos(db: InstanceType<typeof Database>, userId: string | null) {
     remove(id: string): void {
       db.prepare('DELETE FROM users WHERE id = ?').run(id);
     },
+    /** Match by Google's stable subject id, so a changed address keeps the account. */
+    byGoogleSub(sub: string): User | null {
+      const r: any = db.prepare('SELECT * FROM users WHERE google_sub = ?').get(sub);
+      return r ? rowToUser(r) : null;
+    },
+    setGoogleSub(id: string, sub: string): void {
+      db.prepare('UPDATE users SET google_sub = ? WHERE id = ?').run(sub, id);
+    },
   };
 
   const rowToUserAgent = (r: any): UserAgent =>
@@ -1487,6 +1503,7 @@ export function openDb(path: string, userId: string | null = null) {
   const db = new Database(path);
   db.pragma('journal_mode = WAL');
   db.exec(DDL);
+  migrateUsersTable(db);
   migrateAgentsTable(db);
   migrateAgentCronsTable(db);
   migrateOwnedTables(db);

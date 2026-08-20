@@ -77,9 +77,13 @@ describe('platform smoke — every GET API route answers 200 with JSON', () => {
   }, 20_000);
 
   test('the API smoke net covers every GET route under app/api (no route escapes)', () => {
-    // skills/[slug] reads the local ~/.claude/skills dir at runtime (404 without
-    // a slug on disk), so it is not a 200-required smoke route.
-    const IGNORE = new Set(['skills/[slug]']);
+    // Not 200-JSON routes, for stated reasons rather than convenience:
+    //   skills/[slug]        reads ~/.claude/skills at runtime (404 without a
+    //                        slug on disk)
+    //   auth/google[/callback]  redirect by design — one hands off to Google,
+    //                        the other comes back and lands on a page. Their
+    //                        behaviour is pinned in tests/google-oauth.test.ts.
+    const IGNORE = new Set(['skills/[slug]', 'auth/google', 'auth/google/callback']);
     const discovered = discoverGetRoutes(path.join(process.cwd(), 'app', 'api')).filter((r) => !IGNORE.has(r)).sort();
     const covered = ROUTES.map((r) => r.route).sort();
     expect(covered).toEqual(discovered);
