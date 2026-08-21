@@ -16,7 +16,10 @@ import { NextResponse, type NextRequest } from 'next/server';
  *   /api/auth/*     the routes that mint a session (they guard themselves)
  *   /icon.svg       the favicon, requested before any session exists
  */
-const PUBLIC = ['/login', '/api/auth/', '/icon.svg'];
+// A locked-out user has no session by definition, so the reset screens must
+// sit outside the guard or they would be unreachable by the only people who
+// need them.
+const PUBLIC = ['/login', '/reset', '/api/auth/', '/icon.svg'];
 const SESSION_COOKIE = 'emind_session';
 
 export function middleware(req: NextRequest) {

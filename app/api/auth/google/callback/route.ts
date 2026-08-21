@@ -4,6 +4,8 @@ import { getDb } from '@/lib/data';
 import { createSession, SESSION_COOKIE } from '@/lib/auth';
 import { sessionCookieOptions } from '@/lib/session';
 import { backfillRoster } from '@/lib/agents/roster';
+import { recordAuthEvent } from '@/lib/auth-guard';
+import { clientIp, userAgent } from '@/lib/request-context';
 import {
   fetchGoogleProfile,
   linkOrCreateGoogleUser,
@@ -57,6 +59,10 @@ export async function GET(req: Request) {
     return fail(req, err instanceof Error ? err.message : 'Google sign-in failed.');
   }
 
+  recordAuthEvent(getDb(), {
+    event: 'google_login', email: user.email, userId: user.id,
+    ip: clientIp(req), userAgent: userAgent(req),
+  });
   const token = createSession(getDb(), user.id);
   const res = NextResponse.redirect(new URL(returnTo, req.url));
   res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions);

@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { currentUser } from '@/lib/session';
 import { getDb } from '@/lib/data';
 import { AccountSettings } from '@/components/AccountSettings';
+import { totpEnabled } from '@/lib/totp';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,6 +23,7 @@ export default async function SettingsPage() {
       <AccountSettings
         user={{ name: user.name, email: user.email, role: user.role }}
         sessionCount={getDb().sessions.byUser(user.id).length}
+        twoFactorOn={totpEnabled(getDb(), user.id)}
       />
     </div>
   );

@@ -319,6 +319,38 @@ CREATE TABLE IF NOT EXISTS user_agents (
   installed_at TEXT NOT NULL,
   PRIMARY KEY (user_id, agent_id)
 );
+CREATE TABLE IF NOT EXISTS password_resets (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);
+CREATE TABLE IF NOT EXISTS user_totp (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  ciphertext TEXT NOT NULL,
+  iv TEXT NOT NULL,
+  auth_tag TEXT NOT NULL,
+  confirmed INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS user_recovery_codes (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash TEXT NOT NULL,
+  used_at TEXT,
+  PRIMARY KEY (user_id, code_hash)
+);
+CREATE TABLE IF NOT EXISTS auth_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event TEXT NOT NULL,
+  email TEXT,
+  user_id TEXT,
+  ip TEXT,
+  user_agent TEXT,
+  at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_auth_events_email_at ON auth_events(email, at);
+CREATE INDEX IF NOT EXISTS idx_auth_events_ip_at ON auth_events(ip, at);
 CREATE TABLE IF NOT EXISTS user_credentials (
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   key_name TEXT NOT NULL,
@@ -1359,6 +1391,152 @@ function buildRepos(db: InstanceType<typeof Database>, userId: string | null) {
     },
   };
 
+  /**
+   * The authentication audit trail. Deliberately NOT scoped by user: a failed
+   * attempt against an unknown email has no user to belong to, and that is
+   * precisely the row an attack shows up in.
+   */
+  /**
+   * Second-factor state. The secret is stored encrypted — whoever holds it can
+   * mint valid codes forever, so it is as sensitive as an API key.
+   */
+  /**
+   * Reset tokens, stored hashed. Only ONE lives per user at a time: issuing a
+   * new one drops the old, so a forwarded or intercepted older link is already
+   * dead by the time anybody tries it.
+   */
+  const passwordResets = {
+    put(r: { userId: string; tokenHash: string; expiresAt: string }): void {
+      const write = db.transaction(() => {
+        db.prepare('DELETE FROM password_resets WHERE user_id = ?').run(r.userId);
+        db.prepare(
+          'INSERT INTO password_resets (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)',
+        ).run(r.tokenHash, r.userId, r.expiresAt, new Date().toISOString());
+      });
+      write();
+    },
+    get(tokenHash: string): { tokenHash: string; userId: string; expiresAt: string } | null {
+      const r: any = db.prepare('SELECT * FROM password_resets WHERE token_hash = ?').get(tokenHash);
+      return r ? { tokenHash: r.token_hash, userId: r.user_id, expiresAt: r.expires_at } : null;
+    },
+    remove(tokenHash: string): void {
+      db.prepare('DELETE FROM password_resets WHERE token_hash = ?').run(tokenHash);
+    },
+    purgeExpired(nowIso: string): number {
+      return db.prepare('DELETE FROM password_resets WHERE expires_at <= ?').run(nowIso).changes;
+    },
+  };
+
+  const userTotp = {
+    put(userId: string, sealed: { ciphertext: string; iv: string; authTag: string }, confirmed: boolean): void {
+      db.prepare(
+        `INSERT INTO user_totp (user_id, ciphertext, iv, auth_tag, confirmed, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+           ciphertext = excluded.ciphertext, iv = excluded.iv,
+           auth_tag = excluded.auth_tag, confirmed = excluded.confirmed`,
+      ).run(userId, sealed.ciphertext, sealed.iv, sealed.authTag, confirmed ? 1 : 0, new Date().toISOString());
+    },
+    get(userId: string): { sealed: { ciphertext: string; iv: string; authTag: string }; confirmed: boolean } | null {
+      const r: any = db.prepare('SELECT * FROM user_totp WHERE user_id = ?').get(userId);
+      if (!r) return null;
+      return {
+        sealed: { ciphertext: r.ciphertext, iv: r.iv, authTag: r.auth_tag },
+        confirmed: Boolean(r.confirmed),
+      };
+    },
+    remove(userId: string): void {
+      const drop = db.transaction(() => {
+        db.prepare('DELETE FROM user_recovery_codes WHERE user_id = ?').run(userId);
+        db.prepare('DELETE FROM user_totp WHERE user_id = ?').run(userId);
+      });
+      drop();
+    },
+    putRecoveryCodes(userId: string, hashes: string[]): void {
+      const write = db.transaction(() => {
+        db.prepare('DELETE FROM user_recovery_codes WHERE user_id = ?').run(userId);
+        const stmt = db.prepare('INSERT INTO user_recovery_codes (user_id, code_hash, used_at) VALUES (?, ?, NULL)');
+        for (const h of hashes) stmt.run(userId, h);
+      });
+      write();
+    },
+    clearRecoveryCodes(userId: string): void {
+      db.prepare('DELETE FROM user_recovery_codes WHERE user_id = ?').run(userId);
+    },
+    /** Marks the code spent and reports whether it was spendable. */
+    consumeRecoveryCode(userId: string, hash: string): boolean {
+      const res = db
+        .prepare('UPDATE user_recovery_codes SET used_at = ? WHERE user_id = ? AND code_hash = ? AND used_at IS NULL')
+        .run(new Date().toISOString(), userId, hash);
+      return res.changes > 0;
+    },
+  };
+
+  const authEvents = {
+    insert(e: {
+      event: string; email: string | null; userId: string | null;
+      ip: string | null; userAgent: string | null; at: string;
+    }): void {
+      db.prepare(
+        'INSERT INTO auth_events (event, email, user_id, ip, user_agent, at) VALUES (?, ?, ?, ?, ?, ?)',
+      ).run(e.event, e.email, e.userId, e.ip, e.userAgent, e.at);
+    },
+    recent(limit: number): { event: string; email: string | null; ip: string | null; at: string }[] {
+      return db
+        .prepare(`SELECT event, email, ip, at FROM auth_events ORDER BY id DESC LIMIT ${Math.max(0, Math.trunc(limit))}`)
+        .all() as any[];
+    },
+    byUser(userId: string): { event: string; ip: string | null; at: string }[] {
+      return db
+        .prepare('SELECT event, ip, at FROM auth_events WHERE user_id = ? ORDER BY id DESC LIMIT 50')
+        .all(userId) as any[];
+    },
+    /**
+     * Failures for this exact (email, address) PAIR since its last success.
+     *
+     * Deliberately not "email OR address": counting by email alone lets an
+     * attacker lock any victim out of their own account just by guessing
+     * wrong five times — turning the rate limiter into a denial-of-service
+     * tool aimed at the person it exists to protect. Pairing means the
+     * attacker only ever locks out themselves; the victim signing in from
+     * their own machine is unaffected. Spraying is caught separately, below.
+     */
+    failuresSince(email: string, ip: string, since: string): number {
+      const lastOk: any = db
+        .prepare(
+          `SELECT MAX(id) AS id FROM auth_events
+            WHERE event IN ('login_ok', 'google_login') AND email = ? AND ip = ?`,
+        )
+        .get(email, ip);
+      const floor = lastOk?.id ?? 0;
+      const row: any = db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM auth_events
+            WHERE event = 'login_failed' AND at >= ? AND id > ? AND email = ? AND ip = ?`,
+        )
+        .get(since, floor, email, ip);
+      return row.n as number;
+    },
+    /**
+     * How many DIFFERENT accounts one address has failed against recently.
+     * This is the spray signature: a host trying one common password across
+     * many emails never trips a per-account counter.
+     */
+    distinctEmailsFailedFrom(ip: string, since: string): number {
+      const row: any = db
+        .prepare(
+          `SELECT COUNT(DISTINCT email) AS n FROM auth_events
+            WHERE event = 'login_failed' AND ip = ? AND at >= ?`,
+        )
+        .get(ip, since);
+      return row.n as number;
+    },
+    /** Housekeeping: the trail is evidence, not an archive. */
+    purgeOlderThan(iso: string): number {
+      return db.prepare('DELETE FROM auth_events WHERE at < ?').run(iso).changes;
+    },
+  };
+
   const sessions = {
     insert(s: Session): void {
       db.prepare(
@@ -1470,6 +1648,9 @@ function buildRepos(db: InstanceType<typeof Database>, userId: string | null) {
     claimOrphanRows,
     purgeUserData,
     users,
+    passwordResets,
+    userTotp,
+    authEvents,
     sessions,
     userAgents,
     userCredentials,

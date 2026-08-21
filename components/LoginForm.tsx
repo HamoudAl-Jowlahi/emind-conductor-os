@@ -28,6 +28,9 @@ export function LoginForm({
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(notice ?? null);
   const [busy, setBusy] = useState(false);
+  // The server asks for this only after the password is already accepted.
+  const [totpNeeded, setTotpNeeded] = useState(false);
+  const [totp, setTotp] = useState('');
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -37,10 +40,15 @@ export function LoginForm({
       const res = await fetch(needsSetup ? '/api/auth/setup' : '/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(needsSetup ? { email, name, password } : { email, password }),
+        body: JSON.stringify(needsSetup ? { email, name, password } : { email, password, totp: totp || undefined }),
       });
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        const body = (await res.json().catch(() => ({}))) as { error?: string; totpRequired?: boolean };
+        if (body.totpRequired) {
+          setTotpNeeded(true);
+          setError(body.error ?? null);
+          return;
+        }
         setError(body.error ?? 'Something went wrong. Try again.');
         return;
       }
@@ -129,6 +137,16 @@ export function LoginForm({
               placeholder={needsSetup ? 'at least 10 characters' : ''} />
           </div>
 
+          {totpNeeded && (
+            <div className="flex flex-col gap-1.5">
+              <label className={label} htmlFor="totp">Authentication code</label>
+              <input id="totp" className={field} value={totp} onChange={(e) => setTotp(e.target.value)}
+                autoComplete="one-time-code" inputMode="numeric" autoFocus required
+                placeholder="6 digits, or a recovery code" />
+              <p className="font-mono text-[10px] text-os-dim">From your authenticator app.</p>
+            </div>
+          )}
+
           {error && (
             <p role="alert" className="border-l-2 border-os-err py-1 pl-3 font-mono text-[11px] text-os-err">
               {error}
@@ -137,9 +155,16 @@ export function LoginForm({
 
           <button type="submit" disabled={busy}
             className="mt-1 border border-os-accent bg-os-accent px-4 py-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-os-accent-ink transition-opacity hover:opacity-90 disabled:opacity-50">
-            {busy ? 'Working…' : needsSetup ? 'Create operator' : 'Sign in'}
+            {busy ? 'Working…' : needsSetup ? 'Create operator' : totpNeeded ? 'Verify code' : 'Sign in'}
           </button>
         </form>
+
+        {!needsSetup && (
+          <a href="/reset"
+            className="mt-5 inline-block font-mono text-[10px] uppercase tracking-[0.18em] text-os-dim transition-colors hover:text-os-text">
+            Forgot password?
+          </a>
+        )}
 
         <p className="mt-7 font-mono text-[10px] leading-relaxed text-os-dim">
           Sessions last 30 days. Signing out revokes the token server-side.

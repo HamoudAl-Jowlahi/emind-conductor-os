@@ -23,6 +23,7 @@ type RouteEntry = {
 // (connections, social/sync) must still answer 200 with honest state.
 const ROUTES: RouteEntry[] = [
   { route: 'account/sessions', load: () => import('@/app/api/account/sessions/route'), url: 'http://localhost/api/account/sessions' },
+  { route: 'account/totp', load: () => import('@/app/api/account/totp/route'), url: 'http://localhost/api/account/totp' },
   { route: 'agents', load: () => import('@/app/api/agents/route'), url: 'http://localhost/api/agents' },
   { route: 'agents/install', load: () => import('@/app/api/agents/install/route'), url: 'http://localhost/api/agents/install' },
   { route: 'agents/activity', load: () => import('@/app/api/agents/activity/route'), url: 'http://localhost/api/agents/activity?limit=5' },

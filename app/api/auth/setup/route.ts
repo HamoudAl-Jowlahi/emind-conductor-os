@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { getDb } from '@/lib/data';
 import { createUser, createSession, SESSION_COOKIE } from '@/lib/auth';
 import { backfillRoster } from '@/lib/agents/roster';
+import { passwordProblem, recordAuthEvent } from '@/lib/auth-guard';
+import { clientIp, userAgent } from '@/lib/request-context';
 import { sessionCookieOptions } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
@@ -15,12 +17,24 @@ const Body = z.object({
 });
 
 /**
- * First-run claim. Open only while the install has no users — once one exists
- * this 403s, so it can never become a back door for creating a second account.
+ * Account creation.
+ *
+ * Two modes, chosen by SIGNUPS_OPEN:
+ *
+ *   unset / "0"  — first-run claim only. The route works while the install has
+ *                  no users and 403s afterwards, so it cannot become a back
+ *                  door for a second account. This is the safe default: a
+ *                  fresh deployment is not accidentally open to the internet.
+ *   "1"          — public signup. Anyone may register, each account starting
+ *                  empty; only the first inherits the install's seeded data.
+ *
+ * The flag is deliberately opt-in rather than opt-out. Forgetting to close a
+ * door is a far commoner mistake than forgetting to open one.
  */
 export async function POST(req: Request) {
   const db = getDb();
-  if (db.users.count() > 0) {
+  const isFirstUser = db.users.count() === 0;
+  if (!isFirstUser && process.env.SIGNUPS_OPEN !== '1') {
     return NextResponse.json({ error: 'This install already has an operator.' }, { status: 403 });
   }
 
@@ -32,13 +46,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: msg ?? 'Invalid details.' }, { status: 400 });
   }
 
+  const weak = passwordProblem(body.password);
+  if (weak) return NextResponse.json({ error: weak }, { status: 400 });
+
   const user = createUser(db, body);
+  recordAuthEvent(db, {
+    event: 'signup', email: user.email, userId: user.id,
+    ip: clientIp(req), userAgent: userAgent(req),
+  });
 
   // The first user inherits the install: the seeded rows have no owner yet,
   // and the full roster, because this account IS the install rather than a
   // guest joining one. Later accounts start empty and pick from the catalog.
-  db.claimOrphanRows(user.id);
-  backfillRoster(db, user.id);
+  if (isFirstUser) {
+    db.claimOrphanRows(user.id);
+    backfillRoster(db, user.id);
+  }
 
   const token = createSession(db, user.id);
   const res = NextResponse.json({ user: { name: user.name, email: user.email } });
