@@ -238,4 +238,4 @@ intact if you fork this in turn.
 
 ---
 
-**eMind Conductor OS** — forked from [Founder OS](https://www.thefounderos.com).
+**eMind Conductor OS** 
