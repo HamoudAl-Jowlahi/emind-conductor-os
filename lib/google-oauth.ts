@@ -155,6 +155,7 @@ export function linkOrCreateGoogleUser(db: FounderDb, profile: GoogleProfile): U
       throw new Error('Google has not verified that email address, so it cannot be linked to an existing account.');
     }
     db.users.setGoogleSub(existing.user.id, profile.sub);
+    db.users.setEmailVerified(existing.user.id, true);
     return existing.user;
   }
 
@@ -169,5 +170,8 @@ export function linkOrCreateGoogleUser(db: FounderDb, profile: GoogleProfile): U
   // hash empty would make an empty password string a valid login.
   db.users.insert(user, hashPassword(randomBytes(32).toString('hex')));
   db.users.setGoogleSub(user.id, profile.sub);
+  // Google already proved this address — asking the user to prove it again
+  // would be theatre, and email_verified was checked before we got here.
+  if (profile.email_verified) db.users.setEmailVerified(user.id, true);
   return user;
 }

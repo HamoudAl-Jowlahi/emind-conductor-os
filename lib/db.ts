@@ -319,6 +319,13 @@ CREATE TABLE IF NOT EXISTS user_agents (
   installed_at TEXT NOT NULL,
   PRIMARY KEY (user_id, agent_id)
 );
+CREATE TABLE IF NOT EXISTS email_verifications (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_email_verifications_user ON email_verifications(user_id);
 CREATE TABLE IF NOT EXISTS password_resets (
   token_hash TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -435,6 +442,14 @@ function migrateUsersTable(db: InstanceType<typeof Database>): void {
   if (!cols.has('google_sub')) db.exec('ALTER TABLE users ADD COLUMN google_sub TEXT');
   // Unique so one Google identity can never end up on two accounts.
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_sub ON users(google_sub) WHERE google_sub IS NOT NULL');
+
+  if (!cols.has('email_verified')) {
+    db.exec('ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0');
+    // Accounts that predate verification are grandfathered in: the install's
+    // own operator created them before the rule existed, and locking them out
+    // on upgrade would be a worse failure than trusting them.
+    db.exec('UPDATE users SET email_verified = 1');
+  }
 }
 
 /** Databases created before the scheduler landed have no last-fired column. */
@@ -1276,6 +1291,13 @@ function buildRepos(db: InstanceType<typeof Database>, userId: string | null) {
     updateProfile(id: string, name: string, email: string): void {
       db.prepare('UPDATE users SET name = ?, email = ? WHERE id = ?').run(name, email, id);
     },
+    isEmailVerified(id: string): boolean {
+      const r: any = db.prepare('SELECT email_verified FROM users WHERE id = ?').get(id);
+      return Boolean(r?.email_verified);
+    },
+    setEmailVerified(id: string, verified: boolean): void {
+      db.prepare('UPDATE users SET email_verified = ? WHERE id = ?').run(verified ? 1 : 0, id);
+    },
     updatePasswordHash(id: string, passwordHash: string): void {
       db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, id);
     },
@@ -1405,6 +1427,29 @@ function buildRepos(db: InstanceType<typeof Database>, userId: string | null) {
    * new one drops the old, so a forwarded or intercepted older link is already
    * dead by the time anybody tries it.
    */
+  /** Verification links. One live token per account, hashed at rest. */
+  const emailVerifications = {
+    put(r: { userId: string; tokenHash: string; expiresAt: string }): void {
+      const write = db.transaction(() => {
+        db.prepare('DELETE FROM email_verifications WHERE user_id = ?').run(r.userId);
+        db.prepare(
+          'INSERT INTO email_verifications (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)',
+        ).run(r.tokenHash, r.userId, r.expiresAt, new Date().toISOString());
+      });
+      write();
+    },
+    get(tokenHash: string): { tokenHash: string; userId: string; expiresAt: string } | null {
+      const r: any = db.prepare('SELECT * FROM email_verifications WHERE token_hash = ?').get(tokenHash);
+      return r ? { tokenHash: r.token_hash, userId: r.user_id, expiresAt: r.expires_at } : null;
+    },
+    remove(tokenHash: string): void {
+      db.prepare('DELETE FROM email_verifications WHERE token_hash = ?').run(tokenHash);
+    },
+    purgeExpired(nowIso: string): number {
+      return db.prepare('DELETE FROM email_verifications WHERE expires_at <= ?').run(nowIso).changes;
+    },
+  };
+
   const passwordResets = {
     put(r: { userId: string; tokenHash: string; expiresAt: string }): void {
       const write = db.transaction(() => {
@@ -1648,6 +1693,7 @@ function buildRepos(db: InstanceType<typeof Database>, userId: string | null) {
     claimOrphanRows,
     purgeUserData,
     users,
+    emailVerifications,
     passwordResets,
     userTotp,
     authEvents,

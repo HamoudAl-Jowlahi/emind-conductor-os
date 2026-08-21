@@ -19,7 +19,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 // A locked-out user has no session by definition, so the reset screens must
 // sit outside the guard or they would be unreachable by the only people who
 // need them.
-const PUBLIC = ['/login', '/reset', '/api/auth/', '/icon.svg'];
+const PUBLIC = ['/login', '/reset', '/verify', '/api/auth/', '/icon.svg'];
 const SESSION_COOKIE = 'emind_session';
 
 export function middleware(req: NextRequest) {

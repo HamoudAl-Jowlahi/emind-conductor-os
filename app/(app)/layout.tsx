@@ -21,7 +21,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <>
-      <Sidebar />
+      <Sidebar userName={user.name} />
       {/* os-shell yields to the Conductor dock: the panel sets --conductor-w
           and the whole content column glides left instead of being covered */}
       <div className="os-shell ml-[232px] flex min-h-screen min-w-0 flex-col" style={{ marginRight: 'var(--conductor-w, 0px)' }}>

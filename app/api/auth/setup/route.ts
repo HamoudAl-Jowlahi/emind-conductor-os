@@ -4,6 +4,7 @@ import { getDb } from '@/lib/data';
 import { createUser, createSession, SESSION_COOKIE } from '@/lib/auth';
 import { backfillRoster } from '@/lib/agents/roster';
 import { passwordProblem, recordAuthEvent } from '@/lib/auth-guard';
+import { issueVerificationToken, sendVerificationEmail, verificationUrl, markEmailVerified } from '@/lib/email-verification';
 import { clientIp, userAgent } from '@/lib/request-context';
 import { sessionCookieOptions } from '@/lib/session';
 
@@ -61,6 +62,17 @@ export async function POST(req: Request) {
   if (isFirstUser) {
     db.claimOrphanRows(user.id);
     backfillRoster(db, user.id);
+    // The first account IS the install — it was created by whoever set the
+    // server up, not by a stranger typing an address. Requiring confirmation
+    // here would lock the operator out of their own system before mail is
+    // even configured.
+    markEmailVerified(db, user.id);
+  } else {
+    // Everyone else proves the address belongs to them before the account
+    // can be used. Without this, "sign up" means "type any address".
+    const token = issueVerificationToken(db, user.id);
+    const origin = process.env.PUBLIC_ORIGIN ?? new URL(req.url).origin;
+    await sendVerificationEmail(user.email, verificationUrl(origin, token));
   }
 
   const token = createSession(db, user.id);

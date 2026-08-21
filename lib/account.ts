@@ -28,7 +28,13 @@ export function updateProfile(
     throw new Error('That email is already in use by another account.');
   }
 
+  // Moving to a new address un-verifies it. Otherwise verification is trivial
+  // to bypass: prove one address you own, then quietly switch to any other.
+  const movedAddress = db.users.byId(userId)?.email !== email;
+
   db.users.updateProfile(userId, name, email);
+  if (movedAddress) db.users.setEmailVerified(userId, false);
+
   const updated = db.users.byId(userId);
   if (!updated) throw new Error('Account not found.');
   return updated;

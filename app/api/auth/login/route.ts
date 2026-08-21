@@ -5,6 +5,7 @@ import { authenticate, createSession, SESSION_COOKIE } from '@/lib/auth';
 import { sessionCookieOptions } from '@/lib/session';
 import { loginBlocked, recordAuthEvent } from '@/lib/auth-guard';
 import { totpEnabled, verifyUserTotp, consumeRecoveryCode } from '@/lib/totp';
+import { isEmailVerified } from '@/lib/email-verification';
 import { clientIp, userAgent } from '@/lib/request-context';
 
 export const dynamic = 'force-dynamic';
@@ -46,6 +47,16 @@ export async function POST(req: Request) {
   if (!user) {
     recordAuthEvent(db, { event: 'login_failed', email: body.email, ip, userAgent: ua });
     return NextResponse.json({ error: 'Incorrect email or password.' }, { status: 401 });
+  }
+
+  // An unproven address cannot sign in. Checked after the password so this
+  // reveals nothing to someone who does not already hold the credentials.
+  if (!isEmailVerified(db, user.id)) {
+    recordAuthEvent(db, { event: 'login_failed', email: body.email, ip, userAgent: ua });
+    return NextResponse.json(
+      { error: 'Confirm your email address first — check your inbox.', needsVerification: true },
+      { status: 403 },
+    );
   }
 
   // Second factor, if this account has one. The password is already correct at

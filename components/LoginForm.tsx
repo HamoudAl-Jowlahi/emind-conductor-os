@@ -31,6 +31,7 @@ export function LoginForm({
   // The server asks for this only after the password is already accepted.
   const [totpNeeded, setTotpNeeded] = useState(false);
   const [totp, setTotp] = useState('');
+  const [needsVerification, setNeedsVerification] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -43,7 +44,14 @@ export function LoginForm({
         body: JSON.stringify(needsSetup ? { email, name, password } : { email, password, totp: totp || undefined }),
       });
       if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string; totpRequired?: boolean };
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string; totpRequired?: boolean; needsVerification?: boolean;
+        };
+        if (body.needsVerification) {
+          setNeedsVerification(true);
+          setError(body.error ?? null);
+          return;
+        }
         if (body.totpRequired) {
           setTotpNeeded(true);
           setError(body.error ?? null);
@@ -158,6 +166,13 @@ export function LoginForm({
             {busy ? 'Working…' : needsSetup ? 'Create operator' : totpNeeded ? 'Verify code' : 'Sign in'}
           </button>
         </form>
+
+        {needsVerification && (
+          <a href="/verify"
+            className="mt-5 block border border-os-warn px-3 py-2 text-center font-mono text-[10px] uppercase tracking-[0.16em] text-os-warn transition-colors hover:bg-os-warn hover:text-os-bg">
+            Send a new confirmation link
+          </a>
+        )}
 
         {!needsSetup && (
           <a href="/reset"

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { NAV_OPERATE, NAV_AGENTS, NAV_INTELLIGENCE, NAV_SYSTEM, NAV_LIBRARY, type NavItem } from '@/lib/nav';
 import { EmindMark } from '@/components/EmindMark';
+import { SignOutButton } from '@/components/SignOutButton';
 
 function NavGroup({ title, items, pathname }: { title: string; items: NavItem[]; pathname: string }) {
   return (
@@ -33,7 +34,7 @@ function NavGroup({ title, items, pathname }: { title: string; items: NavItem[];
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ userName = '' }: { userName?: string }) {
   const pathname = usePathname();
   const [live, setLive] = useState<{ up: number; total: number } | null>(null);
 
@@ -79,6 +80,7 @@ export function Sidebar() {
         <div className="whitespace-nowrap font-mono text-[10px] text-os-dim">
           localhost:4100 · sqlite · real agents
         </div>
+        {userName && <SignOutButton name={userName} />}
       </div>
     </aside>
   );

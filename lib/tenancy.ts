@@ -24,7 +24,7 @@ export const SHARED_TABLES = [
 /** Identity and membership — scoped by construction, not by a added column. */
 /** auth_events is here, not OWNED: a failed attempt on an unknown email has
  * no user to belong to, and that row is exactly what an attack looks like. */
-export const IDENTITY_TABLES = ['users', 'sessions', 'user_agents', 'agent_crons', 'user_credentials', 'auth_events', 'user_totp', 'user_recovery_codes', 'password_resets'] as const;
+export const IDENTITY_TABLES = ['users', 'sessions', 'user_agents', 'agent_crons', 'user_credentials', 'auth_events', 'user_totp', 'user_recovery_codes', 'password_resets', 'email_verifications'] as const;
 
 /** One person's business. Every read MUST be filtered by user_id. */
 export const OWNED_TABLES = [

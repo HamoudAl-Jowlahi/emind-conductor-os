@@ -171,3 +171,34 @@ describe('session drives operator identity, not the env defaults', () => {
     expect(mw).toMatch(/status: 401/);
   });
 });
+
+/**
+ * Signing out must kill the session ROW, not just the cookie. Clearing the
+ * cookie alone leaves a working credential behind: anyone holding a copy of
+ * that token — a shared machine, a proxy log, a synced browser profile — walks
+ * straight back in.
+ */
+describe('signing out ends the session server-side', () => {
+  test('the token stops working, and its row is gone', () => {
+    const user = createUser(db, { email: 'out@x.co', name: 'Out', password: 'Str0ng-pass-2026' });
+    const token = createSession(db, user.id);
+    expect(resolveSession(db, token)?.id).toBe(user.id);
+
+    destroySession(db, token);
+
+    expect(resolveSession(db, token)).toBeNull();
+    const row = db.raw.prepare('SELECT COUNT(*) AS n FROM sessions WHERE id = ?').get(token) as { n: number };
+    expect(row.n).toBe(0);
+  });
+
+  test('it ends only that session, not the account other devices', () => {
+    const user = createUser(db, { email: 'out2@x.co', name: 'Out2', password: 'Str0ng-pass-2026' });
+    const here = createSession(db, user.id);
+    const phone = createSession(db, user.id);
+
+    destroySession(db, here);
+
+    expect(resolveSession(db, here)).toBeNull();
+    expect(resolveSession(db, phone)?.id).toBe(user.id);
+  });
+});
